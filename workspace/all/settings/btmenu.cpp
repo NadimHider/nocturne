@@ -287,103 +287,37 @@ PairableItem::PairableItem(BT_device d, MenuList* submenu)
     : MenuItem(ListItemType::Custom, d.name, d.addr, DeferToSubmenu, submenu), dev(d)
 {}
 
-void PairableItem::drawCustomItem(SDL_Surface *surface, const SDL_Rect &dst, const AbstractMenuItem &item, bool selected) const
+void PairableItem::drawCustomItem(SDL_Surface *surface, const SDL_Rect &dst, const AbstractMenuItem &, bool) const
 {
-    SDL_Color text_color = uintToColour(THEME_COLOR4_255);
-    SDL_Surface *text = TTF_RenderUTF8_Blended(font.tiny, item.getLabel().c_str(), uintToColour(THEME_COLOR4_255)); // always white
-
-    // hack - this should be correlated to max_width
-    int mw = dst.w;
-
-    if (selected)
-    {
-        // gray pill
-        GFX_blitPillLightCPP(ASSET_BUTTON, surface, {dst.x, dst.y, mw, SCALE1(BUTTON_SIZE)});
-    }
-
-    // device icon
-    if(dev.kind != BLUETOOTH_NONE) {
-        auto asset = (dev.kind == BLUETOOTH_AUDIO) ? ASSET_AUDIO : ASSET_CONTROLLER;
-        SDL_Rect rect = (dev.kind == BLUETOOTH_AUDIO) ? SDL_Rect{0, 0, 12, 12} : SDL_Rect{0, 0, 12, 12};
-        int ix = dst.x + dst.w - SCALE1(OPTION_PADDING + rect.w);
-        int y = dst.y + SCALE1(BUTTON_SIZE - rect.h) / 2;
-        SDL_Rect tgt{ix, y};
-        GFX_blitAssetColor(asset, NULL, surface, &tgt, THEME_COLOR6);
-    }
-
-    if (selected)
-    {
-        // white pill
-        int w = 0;
-        TTF_SizeUTF8(font.small, item.getName().c_str(), &w, NULL);
-        w += SCALE1(OPTION_PADDING * 2);
-        GFX_blitPillDarkCPP(ASSET_BUTTON, surface, {dst.x, dst.y, w, SCALE1(BUTTON_SIZE)});
-        text_color = uintToColour(THEME_COLOR5_255);
-    }
-
-    text = TTF_RenderUTF8_Blended(font.small, item.getName().c_str(), text_color);
-    SDL_BlitSurfaceCPP(text, {}, surface, {dst.x + SCALE1(OPTION_PADDING), dst.y + SCALE1(1)});
-    SDL_FreeSurface(text);
+    // MenuList draws the row and label; custom renderers only add status icons.
+    if (dev.kind == BLUETOOTH_NONE) return;
+    auto asset = dev.kind == BLUETOOTH_AUDIO ? ASSET_AUDIO : ASSET_CONTROLLER;
+    SDL_Rect target{dst.x + dst.w - SCALE1(OPTION_PADDING + 12),
+                    dst.y + (dst.h - SCALE1(12)) / 2};
+    GFX_blitAssetColor(asset, NULL, surface, &target, THEME_COLOR6);
 }
 
 PairedItem::PairedItem(BT_devicePaired d, MenuList* submenu)
     : MenuItem(ListItemType::Custom, d.remote_name, d.remote_addr, DeferToSubmenu, submenu), dev(d)
 {}
 
-void PairedItem::drawCustomItem(SDL_Surface *surface, const SDL_Rect &dst, const AbstractMenuItem &item, bool selected) const
+void PairedItem::drawCustomItem(SDL_Surface *surface, const SDL_Rect &dst, const AbstractMenuItem &, bool) const
 {
-    SDL_Color text_color = uintToColour(THEME_COLOR4_255);
-    SDL_Surface *text = TTF_RenderUTF8_Blended(font.tiny, item.getLabel().c_str(), uintToColour(THEME_COLOR4_255)); // always white
-
-    // hack - this should be correlated to max_width
-    int mw = dst.w;
-
-    if (selected)
-    {
-        // gray pill
-        GFX_blitPillLightCPP(ASSET_BUTTON, surface, {dst.x, dst.y, mw, SCALE1(BUTTON_SIZE)});
-    }
-
-    // rssi icon
     auto asset =
-        dev.rssi == 0   ? ASSET_WIFI_OFF : 
+        dev.rssi == 0   ? ASSET_WIFI_OFF :
         dev.rssi >= -55 ? ASSET_WIFI :
-        dev.rssi >= -67 ? ASSET_WIFI_MED
-                        : ASSET_WIFI_LOW;
-    SDL_Rect rect = {0, 0, 12, 12};
-    int ix = dst.x + dst.w - SCALE1(OPTION_PADDING + rect.w);
-    int y = dst.y + SCALE1(BUTTON_SIZE - rect.h) / 2;
-    SDL_Rect tgt{ix, y};
-    GFX_blitAssetColor(asset, NULL, surface, &tgt, THEME_COLOR6);
+        dev.rssi >= -67 ? ASSET_WIFI_MED : ASSET_WIFI_LOW;
+    int icon_x = dst.x + dst.w - SCALE1(OPTION_PADDING + 12);
+    SDL_Rect target{icon_x, dst.y + (dst.h - SCALE1(12)) / 2};
+    GFX_blitAssetColor(asset, NULL, surface, &target, THEME_COLOR6);
 
-    // connected
-    if(dev.is_connected) {
-        SDL_Rect rect = {0, 0, 12, 12};
-        ix = ix - SCALE1(OPTION_PADDING + rect.w);
-        int y = dst.y + SCALE1(BUTTON_SIZE - rect.h) / 2;
-        SDL_Rect tgt{ix, y};
-        GFX_blitAssetColor(ASSET_CHECKCIRCLE, NULL, surface, &tgt, THEME_COLOR6);
+    icon_x -= SCALE1(OPTION_PADDING + 12);
+    if (dev.is_connected) {
+        SDL_Rect status{icon_x + SCALE1(1), dst.y + (dst.h - SCALE1(10)) / 2};
+        GFX_blitAssetColor(ASSET_CHECKCIRCLE, NULL, surface, &status, THEME_COLOR6);
     }
-    // bonded
-    else if(dev.is_bonded) {
-        SDL_Rect rect = {0, 0, 8, 11};
-        ix = ix - SCALE1(OPTION_PADDING + rect.w + 2);
-        int y = dst.y + SCALE1(BUTTON_SIZE - rect.h) / 2;
-        SDL_Rect tgt{ix, y};
-        GFX_blitAssetColor(ASSET_LOCK, NULL, surface, &tgt, THEME_COLOR6);
+    else if (dev.is_bonded) {
+        SDL_Rect status{icon_x + SCALE1(2), dst.y + (dst.h - SCALE1(11)) / 2};
+        GFX_blitAssetColor(ASSET_LOCK, NULL, surface, &status, THEME_COLOR6);
     }
-
-    if (selected)
-    {
-        // white pill
-        int w = 0;
-        TTF_SizeUTF8(font.small, item.getName().c_str(), &w, NULL);
-        w += SCALE1(OPTION_PADDING * 2);
-        GFX_blitPillDarkCPP(ASSET_BUTTON, surface, {dst.x, dst.y, w, SCALE1(BUTTON_SIZE)});
-        text_color = uintToColour(THEME_COLOR5_255);
-    }
-
-    text = TTF_RenderUTF8_Blended(font.small, item.getName().c_str(), text_color);
-    SDL_BlitSurfaceCPP(text, {}, surface, {dst.x + SCALE1(OPTION_PADDING), dst.y + SCALE1(1)});
-    SDL_FreeSurface(text);
 }

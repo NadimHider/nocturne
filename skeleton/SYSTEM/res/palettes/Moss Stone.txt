@@ -1,0 +1,9 @@
+version=1
+name=Moss Stone
+color1=0xA8BA89FF
+color2=0x171C15FF
+color3=0x2C3527FF
+color4=0xE3E9DAFF
+color5=0x071210FF
+color6=0xAFBBA2FF
+color7=0x090D07FF

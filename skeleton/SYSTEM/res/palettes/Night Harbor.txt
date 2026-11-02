@@ -1,0 +1,9 @@
+version=1
+name=Night Harbor
+color1=0x7D9CA8FF
+color2=0x080D10FF
+color3=0x142029FF
+color4=0xB9C5CBFF
+color5=0x071210FF
+color6=0x9CABB4FF
+color7=0x010203FF

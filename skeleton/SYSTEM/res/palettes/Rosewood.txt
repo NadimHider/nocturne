@@ -1,0 +1,9 @@
+version=1
+name=Rosewood
+color1=0xD1A0AAFF
+color2=0x21171AFF
+color3=0x3A292EFF
+color4=0xF0E0E4FF
+color5=0x071210FF
+color6=0xC0A9B0FF
+color7=0x0F080BFF

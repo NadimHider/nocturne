@@ -1,0 +1,9 @@
+version=1
+name=Ocean Ink
+color1=0x72B8D4FF
+color2=0x101B24FF
+color3=0x1D3341FF
+color4=0xDCEAF1FF
+color5=0x071210FF
+color6=0xA3BAC8FF
+color7=0x060C12FF

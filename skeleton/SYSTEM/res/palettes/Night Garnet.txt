@@ -1,0 +1,9 @@
+version=1
+name=Night Garnet
+color1=0xAA8891FF
+color2=0x10090CFF
+color3=0x24171DFF
+color4=0xCCB8BEFF
+color5=0x071210FF
+color6=0xB29CA4FF
+color7=0x030102FF

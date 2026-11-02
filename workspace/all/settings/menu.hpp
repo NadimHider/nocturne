@@ -311,6 +311,8 @@ protected:
     std::vector<AbstractMenuItem*> items;
     int max_width{0}; // cached on first draw
     bool layout_called{false};
+    SDL_Rect layout_rect{};
+    int layout_row_height{0};
 
     struct Scope
     {
@@ -320,7 +322,7 @@ protected:
         int visible_rows;
         int max_visible_options;
         int selected;
-    } scope;
+    } scope{};
 
     MenuListCallback on_change;
     MenuListCallback on_confirm;

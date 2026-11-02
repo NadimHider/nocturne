@@ -15,18 +15,27 @@ Nocturne preserves upstream compatibility identifiers, card paths, pak conventio
 ## Runtime components
 
 ```mermaid
-flowchart LR
-    Input[H700 controls] --> Frontend[nextui.elf]
-    Input --> Keymon[keymon.elf]
-    Keymon --> Volume[Volume and brightness]
-    Frontend --> Settings[Settings.pak]
-    Frontend --> Switcher[Game Switcher]
-    Frontend --> MinArch[minarch.elf]
+flowchart TD
+    OS[Base OS] --> Boot["dmenu.bin: boot shim and splash"]
+    Boot --> Launcher["MinUI.pak launcher"]
+    Launcher --> Helpers["keymon, batmon, audiomon"]
+    Launcher --> Frontend["nextui.elf: library, Quick Menu, Game Switcher"]
+    Frontend --> Settings["Settings.pak: settings.elf"]
+    Frontend --> Pak["Emulator pak: launch.sh"]
+    Pak --> MinArch[minarch.elf]
     MinArch --> Cores[libretro cores]
-    Frontend --> Card[.userdata, Roms, Saves, Bios]
-    MinArch --> Card
-    Settings --> Card
+    Shared["Shared configuration, typography, theme and power API"] -.-> Frontend
+    Shared -.-> Settings
+    Shared -.-> MinArch
+    Resources[".system/res: fonts, UI assets, 35 palettes"] --> Shared
+    Shared <--> Config[".userdata/shared/minuisettings.txt"]
+    Frontend <--> Card["Card: Roms, Collections, Saves, Bios, .userdata"]
+    MinArch <--> Card
+    Shared --> Suspend["H700 suspend and run_hooks.sh"]
 ```
+
+The boot shim runs within the existing Base OS installation. A component update
+does not replace that OS, its kernel, the installed emulator cores, or user data.
 
 | Component | Responsibility |
 | --- | --- |
@@ -38,6 +47,7 @@ flowchart LR
 | `LedControl.pak` | RGB LED configuration |
 | `CleanRomset.pak` | Consolidates legacy ROM folders and removes non-ROM files |
 | `syncsettings.elf`, `nextval.elf` | Supporting utilities for settings synchronization and value editing |
+| `suspend`, `run_hooks.sh` | H700 suspend/resume coordination, state restoration, and lifecycle hooks |
 
 ## Repository layout
 
@@ -59,7 +69,11 @@ docs/            Installation, controls, configuration, architecture, validation
 .github/         CI and H700 packaging workflows
 ```
 
-The shared layer under `workspace/all/common` contains the palette engine, font loading, surface animation helpers, configuration parser, and platform abstraction. Platform-specific behavior lives under `workspace/h700`.
+The shared layer under `workspace/all/common` contains the palette engine,
+`theme.h` contrast rules, `typography.h` font scale, SDL_ttf font loading, row
+metrics, text fitting, animation helpers, configuration parser, and power API.
+H700 hardware integration lives under `workspace/h700`; installed platform
+scripts and assets come from `skeleton/SYSTEM/h700`.
 
 ## Boot and runtime flow
 
@@ -86,9 +100,47 @@ The palette engine exposes seven semantic slots:
 | `color6` | Secondary text and hints |
 | `color7` | Backdrop |
 
-Selection text is derived from the selection fill. Imported palettes are normalized for dark opaque surfaces and lifted text contrast, and the original palette file is not rewritten.
+Selection text is derived from the selection fill. Imported palettes are normalized
+for dark opaque surfaces and lifted text contrast; the original palette file is
+not rewritten. The 35 shipped palettes include 10 Night options with darker
+surfaces and softer text and accents. User palettes can live in `/Palettes` at the
+card root. See the [palette guide](PALETTES.md).
 
-Fonts are loaded from `.system/res` through SDL_ttf. The default is Departure Mono. Four size steps map to the frontend and list text, with a floor of 8 points for the smallest text. Missing fonts fall back to Departure Mono.
+Fonts are loaded from `.system/res` through SDL_ttf. Departure Mono is the default;
+Silkscreen, Home Video, and Fake Receipt are also shipped. Primary font handles
+(`large`, `medium`, and `small`) deliberately share one size across library,
+Settings, and in-game menus. The names remain for compatibility with callers.
+
+| Preset | Primary text | Secondary text | Battery micro text |
+| --- | --- | --- | --- |
+| Compact | 9 pt | 8 pt | 8 pt |
+| Comfortable, default | 10 pt | 8 pt | 8 pt |
+| Large | 12 pt | 10 pt | 8 pt |
+| Extra Large | 14 pt | 12 pt | 9 pt |
+
+These are logical sizes before H700's 2× scaling. The default primary size matches
+the Settings app's original comfortable body text. Option row heights use loaded
+font metrics and padding; label and value columns fit text within their allocated
+widths. Live font changes retain the working handles if a replacement fails to
+load. Missing selected fonts fall back to Departure Mono.
+
+## Sleep and recovery
+
+The shared power API keeps two stages: screen-off first, then deep suspend after
+the configured delay. A disabled suspend timeout leaves the device screen-off
+while yielding CPU time. Existing charging and USB exceptions remain in effect.
+
+On H700, the caller closes audio and pauses helper processes before the platform
+suspend script runs. The script snapshots mixer state, stops active radios, and
+requests kernel suspend. Wake restores the display/LED and mixer state before
+returning; the caller then resumes helpers and reopens audio. Radio reconnection
+continues asynchronously so it does not hold up input handling.
+
+Failed suspend restores the awake state instead of escalating to power-off.
+A second attempt is cancelled while a prior radio-restore worker is busy, and
+sleep/resume hooks are bounded. The helper restores state on normal return,
+failure, and catchable termination. See [sleep and wake](SLEEP.md) for details and
+the remaining hardware validation checklist.
 
 ## Motion
 
@@ -103,6 +155,7 @@ Screen transitions use elapsed wall-clock time and 60 fps frame pacing. Snappy t
 | `h700.yaml` | `ubuntu-24.04-arm` | Cross-builds the H700 components, packages `h700-update`, and uploads the `h700-boot` payload |
 | `ci.yaml` | `ubuntu-24.04-arm` | Builds the full core matrix and aggregate release package |
 | `dev.yaml` | Hosted runner | Desktop and development builds |
+| `ui-validation.yaml` | `ubuntu-24.04` | Host policy, palette, typography and mocked sleep checks; desktop app builds and font-size screenshots |
 
 Local H700 builds use the `ghcr.io/loveretro/h700-toolchain:latest` container:
 
@@ -117,7 +170,13 @@ Host policy tests run without the cross toolchain:
 make test-nocturne
 ```
 
-The H700 packaging step collects the frontend, MinArch, key monitor, supporting utilities, Settings, LED Control, and CleanRomset into a single update archive. Release packaging arranges the binaries under `.system/h700/bin`, the tools under `Tools/h700`, adds the built-in palettes under `.system/res/palettes`, and writes `.system/version.txt` with the release and build stamp.
+The H700 packaging step collects the frontend, MinArch, key monitor, supporting
+utilities, Settings, LED Control, and CleanRomset into an update archive. It also
+ships `suspend`, `run_hooks.sh`, and the complete shared `.system/res` resources,
+including the four fonts and all 35 palettes. The boot payload is uploaded as a
+separate artifact. Release packaging combines the verified components and boot
+payload under their card paths and writes `.system/version.txt` with the release
+and build stamp.
 
 ## Compatibility
 

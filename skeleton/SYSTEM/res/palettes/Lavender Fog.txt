@@ -1,0 +1,9 @@
+version=1
+name=Lavender Fog
+color1=0xAAA8D2FF
+color2=0x191924FF
+color3=0x303044FF
+color4=0xE5E4EFFF
+color5=0x071210FF
+color6=0xB2B0C6FF
+color7=0x0A0A10FF

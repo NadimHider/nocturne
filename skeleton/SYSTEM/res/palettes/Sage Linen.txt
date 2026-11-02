@@ -1,0 +1,9 @@
+version=1
+name=Sage Linen
+color1=0xB9C4A3FF
+color2=0x1B1E17FF
+color3=0x31382AFF
+color4=0xE7EBDDFF
+color5=0x071210FF
+color6=0xB5BDA9FF
+color7=0x0B0E08FF

@@ -224,6 +224,9 @@ typedef struct GFX_Fonts {
 	TTF_Font* micro; 	// icon overlay text
 } GFX_Fonts;
 extern GFX_Fonts font;
+// Layout sizes are physical pixels; minimum is in unscaled UI units.
+int GFX_getRowHeight(TTF_Font *face, int minimum);
+int GFX_centerTextY(TTF_Font *face, int y, int height);
 
 enum {
 	SHARPNESS_SHARP,
@@ -354,7 +357,7 @@ enum {
 int GFX_getVsync(void);
 void GFX_setVsync(int vsync);
 
-int GFX_truncateText(TTF_Font* font, const char* in_name, char* out_name, int max_width, int padding); // returns final width
+int GFX_truncateText(TTF_Font* font, const char* in_name, char* out_name, size_t capacity, int max_width, int padding); // returns final width
 int PLAT_textShouldScroll(TTF_Font* font, const char* in_name, int max_width, SDL_mutex* fontMutex);
 void PLAT_resetScrollText(void);
 void GFX_scrollTextSurface(TTF_Font* font, const char* in_name, SDL_Surface** out_surface, int max_width, int height, int padding, SDL_Color color,float heightratio); // returns final width

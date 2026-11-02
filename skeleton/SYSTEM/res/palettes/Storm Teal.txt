@@ -1,0 +1,9 @@
+version=1
+name=Storm Teal
+color1=0x79BBB7FF
+color2=0x121D1EFF
+color3=0x223638FF
+color4=0xDDEBEAFF
+color5=0x071210FF
+color6=0xA3BCBCFF
+color7=0x060D0EFF

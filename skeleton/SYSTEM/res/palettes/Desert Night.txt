@@ -1,0 +1,9 @@
+version=1
+name=Desert Night
+color1=0xCDBA83FF
+color2=0x1D1B14FF
+color3=0x363124FF
+color4=0xECE8DAFF
+color5=0x071210FF
+color6=0xBBB5A0FF
+color7=0x0D0C07FF

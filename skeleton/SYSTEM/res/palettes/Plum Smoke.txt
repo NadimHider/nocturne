@@ -1,0 +1,9 @@
+version=1
+name=Plum Smoke
+color1=0xB8A0CBFF
+color2=0x1D1721FF
+color3=0x352A3DFF
+color4=0xEAE1EEFF
+color5=0x071210FF
+color6=0xBAABBFFF
+color7=0x0C080FFF

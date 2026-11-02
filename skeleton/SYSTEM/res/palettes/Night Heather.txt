@@ -1,0 +1,9 @@
+version=1
+name=Night Heather
+color1=0xA08BA7FF
+color2=0x0D090FFF
+color3=0x201724FF
+color4=0xC5BACAFF
+color5=0x071210FF
+color6=0xAD9DB2FF
+color7=0x030103FF

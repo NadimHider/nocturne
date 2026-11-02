@@ -237,59 +237,22 @@ NetworkItem::NetworkItem(WIFI_network n, bool connected, MenuList* submenu)
     : MenuItem(ListItemType::Custom, n.ssid, n.bssid, DeferToSubmenu, submenu), net(n), connected(connected)
 {}
 
-void NetworkItem::drawCustomItem(SDL_Surface *surface, const SDL_Rect &dst, const AbstractMenuItem &item, bool selected) const
+void NetworkItem::drawCustomItem(SDL_Surface *surface, const SDL_Rect &dst, const AbstractMenuItem &, bool) const
 {
-    SDL_Color text_color = uintToColour(THEME_COLOR4_255);
-    SDL_Surface *text = TTF_RenderUTF8_Blended(font.tiny, item.getLabel().c_str(), uintToColour(THEME_COLOR4_255)); // always white
+    // Reserve two right-aligned icon slots; MenuList owns the label and pill.
+    auto asset = net.rssi >= -60 ? ASSET_WIFI :
+                 net.rssi >= -70 ? ASSET_WIFI_MED : ASSET_WIFI_LOW;
+    int icon_x = dst.x + dst.w - SCALE1(OPTION_PADDING + 12);
+    SDL_Rect target{icon_x, dst.y + (dst.h - SCALE1(12)) / 2};
+    GFX_blitAssetColor(asset, NULL, surface, &target, THEME_COLOR6);
 
-    // hack - this should be correlated to max_width
-    int mw = dst.w;
-
-    if (selected)
-    {
-        // gray pill
-        GFX_blitPillLightCPP(ASSET_BUTTON, surface, {dst.x, dst.y, mw, SCALE1(BUTTON_SIZE)});
+    icon_x -= SCALE1(OPTION_PADDING + 12);
+    if (connected) {
+        SDL_Rect status{icon_x + SCALE1(1), dst.y + (dst.h - SCALE1(10)) / 2};
+        GFX_blitAssetColor(ASSET_CHECKCIRCLE, NULL, surface, &status, THEME_COLOR6);
     }
-
-    // wifi icon
-    auto asset =
-        net.rssi >= -60 ? ASSET_WIFI :    // anything above 61
-        net.rssi >= -70 ? ASSET_WIFI_MED  // -61 and below
-                        : ASSET_WIFI_LOW; // -71 and below
-    SDL_Rect rect = {0, 0, 12, 12};
-    int ix = dst.x + dst.w - SCALE1(OPTION_PADDING + rect.w);
-    int y = dst.y + SCALE1(BUTTON_SIZE - rect.h) / 2;
-    SDL_Rect tgt{ix, y};
-    GFX_blitAssetColor(asset, NULL, surface, &tgt, THEME_COLOR6);
-
-    // connected
-    if(connected) {
-        SDL_Rect rect = {0, 0, 12, 12};
-        ix = ix - SCALE1(OPTION_PADDING + rect.w);
-        int y = dst.y + SCALE1(BUTTON_SIZE - rect.h) / 2;
-        SDL_Rect tgt{ix, y};
-        GFX_blitAssetColor(ASSET_CHECKCIRCLE, NULL, surface, &tgt, THEME_COLOR6);
+    else if (net.security != SECURITY_NONE) {
+        SDL_Rect status{icon_x + SCALE1(2), dst.y + (dst.h - SCALE1(11)) / 2};
+        GFX_blitAssetColor(ASSET_LOCK, NULL, surface, &status, THEME_COLOR6);
     }
-    // encrypted
-    else if(net.security != SECURITY_NONE) {
-        SDL_Rect rect = {0, 0, 8, 11};
-        ix = ix - SCALE1(OPTION_PADDING + rect.w + 2);
-        int y = dst.y + SCALE1(BUTTON_SIZE - rect.h) / 2;
-        SDL_Rect tgt{ix, y};
-        GFX_blitAssetColor(ASSET_LOCK, NULL, surface, &tgt, THEME_COLOR6);
-    }
-
-    if (selected)
-    {
-        // white pill
-        int w = 0;
-        TTF_SizeUTF8(font.small, item.getName().c_str(), &w, NULL);
-        w += SCALE1(OPTION_PADDING * 2);
-        GFX_blitPillDarkCPP(ASSET_BUTTON, surface, {dst.x, dst.y, w, SCALE1(BUTTON_SIZE)});
-        text_color = uintToColour(THEME_COLOR5_255);
-    }
-
-    text = TTF_RenderUTF8_Blended(font.small, item.getName().c_str(), text_color);
-    SDL_BlitSurfaceCPP(text, {}, surface, {dst.x + SCALE1(OPTION_PADDING), dst.y + SCALE1(1)});
-    SDL_FreeSurface(text);
 }

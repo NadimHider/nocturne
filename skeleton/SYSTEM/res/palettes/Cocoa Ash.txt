@@ -1,0 +1,9 @@
+version=1
+name=Cocoa Ash
+color1=0xC5AD94FF
+color2=0x1E1915FF
+color3=0x382E27FF
+color4=0xEBE3DAFF
+color5=0x071210FF
+color6=0xBDAF9FFF
+color7=0x0D0A07FF

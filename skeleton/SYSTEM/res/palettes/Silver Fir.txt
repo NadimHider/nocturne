@@ -1,0 +1,9 @@
+version=1
+name=Silver Fir
+color1=0x9CB9ADFF
+color2=0x151D19FF
+color3=0x29392FFF
+color4=0xE1EAE5FF
+color5=0x071210FF
+color6=0xADBCB3FF
+color7=0x080E0AFF

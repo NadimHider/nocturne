@@ -19,6 +19,7 @@
 
 #include "utils.h"
 #include "config.h"
+#include "typography.h"
 
 #include <pthread.h>
 
@@ -362,48 +363,43 @@ FALLBACK_IMPLEMENTATION void PLAT_getGPUUsage()
 	perf.gpu_usage = 0.0;
 }
 
+int GFX_getRowHeight(TTF_Font *face, int minimum)
+{
+	return Typography_rowHeight(face ? TTF_FontHeight(face) : 0, SCALE1(minimum), SCALE1(8));
+}
+
+int GFX_centerTextY(TTF_Font *face, int y, int height)
+{
+	return y + (height - TTF_FontHeight(face)) / 2;
+}
+
 int GFX_loadSystemFont(const char *fontPath)
 {
 	// Load/Reload fonts
 	if (!TTF_WasInit())
 		TTF_Init();
 
-	TTF_CloseFont(font.large);
-	TTF_CloseFont(font.medium);
-	TTF_CloseFont(font.small);
-	TTF_CloseFont(font.tiny);
-	TTF_CloseFont(font.micro);
-
-	// Existing numeric settings are preserved; the default is now comfortable
-	// rather than synthetic-bold/compact. Every step is two points smaller than
-	// the original scale, and micro text is never smaller than 8.
-	static const int sizes[4][5] = {
-		{12, 10,  9, 8, 8},
-		{14, 12, 10, 8, 8},
-		{16, 13, 11, 9, 8},
-		{18, 14, 12, 10, 8},
-	};
 	int size = CFG_getFontSize();
-	if (size < 0 || size > 3) size = CFG_DEFAULT_FONT_SIZE;
-	const int *points = sizes[size];
 	const char *paths[] = {fontPath, RES_PATH "/DepartureMono-Regular.otf"};
+	TTF_Font *loaded[5] = {0};
 	TTF_Font **fonts[] = {&font.large, &font.medium, &font.small, &font.tiny, &font.micro};
 	for (int i = 0; i < 5; i++) {
 		for (int attempt = 0; attempt < 2; attempt++) {
-			*fonts[i] = TTF_OpenFont(paths[attempt], SCALE1(points[i]));
-			if (*fonts[i]) break;
+			loaded[i] = TTF_OpenFont(paths[attempt], SCALE1(Typography_points(size, i)));
+			if (loaded[i]) break;
 		}
-		if (!*fonts[i]) {
+		if (!loaded[i]) {
 			LOG_error("Unable to load UI font: %s\n", paths[0]);
+			for (int j = 0; j < i; j++) TTF_CloseFont(loaded[j]);
 			return -1;
 		}
+		TTF_SetFontStyle(loaded[i], CFG_getFontStyle());
 	}
-
-	TTF_SetFontStyle(font.large, CFG_getFontStyle());
-	TTF_SetFontStyle(font.medium, CFG_getFontStyle());
-	TTF_SetFontStyle(font.small, CFG_getFontStyle());
-	TTF_SetFontStyle(font.tiny, CFG_getFontStyle());
-	TTF_SetFontStyle(font.micro, CFG_getFontStyle());
+	// Keep the previous working fonts if any role fails to load.
+	for (int i = 0; i < 5; i++) {
+		if (*fonts[i]) TTF_CloseFont(*fonts[i]);
+		*fonts[i] = loaded[i];
+	}
 
 	return 0;
 }
@@ -1033,22 +1029,35 @@ void GFX_delay(void)
 FALLBACK_IMPLEMENTATION int PLAT_supportsOverscan(void) { return 0; }
 FALLBACK_IMPLEMENTATION void PLAT_setEffectColor(int next_color) {}
 
-int GFX_truncateText(TTF_Font *font, const char *in_name, char *out_name, int max_width, int padding)
+int GFX_truncateText(TTF_Font *font, const char *in_name, char *out_name, size_t capacity, int max_width, int padding)
 {
-	int text_width;
-	strcpy(out_name, in_name);
+	int text_width = 0;
+	if (!capacity) return padding;
+	size_t input_length = strlen(in_name);
+	size_t copied = input_length < capacity ? input_length : capacity - 1;
+	if (copied < input_length)
+		while (copied && ((unsigned char)in_name[copied] & 0xC0) == 0x80) copied--;
+	memmove(out_name, in_name, copied);
+	out_name[copied] = '\0';
 	TTF_SizeUTF8(font, out_name, &text_width, NULL);
-	text_width += padding;
+	if (text_width + padding <= max_width) return text_width + padding;
 
-	while (text_width > max_width)
-	{
-		int len = strlen(out_name);
-		strcpy(&out_name[len - 4], "...\0");
+	// Never cut through a UTF-8 codepoint or write before a short buffer when
+	// even the ellipsis cannot fit (e.g. a narrow label/value column).
+	size_t length = strlen(out_name);
+	if (length < 3) { out_name[0] = '\0'; return padding; }
+	size_t prefix = length - 3;
+	while (prefix && ((unsigned char)out_name[prefix] & 0xC0) == 0x80) prefix--;
+	for (;;) {
+		memcpy(out_name + prefix, "...", 4);
+		text_width = 0;
 		TTF_SizeUTF8(font, out_name, &text_width, NULL);
-		text_width += padding;
+		if (text_width + padding <= max_width) return text_width + padding;
+		if (!prefix) break;
+		do { prefix--; } while (prefix && ((unsigned char)out_name[prefix] & 0xC0) == 0x80);
 	}
-
-	return text_width;
+	out_name[0] = '\0';
+	return padding;
 }
 int GFX_getTextHeight(TTF_Font *font, const char *in_name, char *out_name, int max_width, int padding)
 {
@@ -1082,7 +1091,7 @@ int GFX_wrapText(TTF_Font *font, char *str, int max_width, int max_lines)
 	TTF_SizeUTF8(font, line, &line_width, NULL);
 	if (line_width <= max_width)
 	{
-		line_width = GFX_truncateText(font, line, buffer, max_width, 0);
+		line_width = GFX_truncateText(font, line, buffer, sizeof(buffer), max_width, 0);
 		strcpy(line, buffer);
 		return line_width;
 	}
@@ -1133,7 +1142,7 @@ int GFX_wrapText(TTF_Font *font, char *str, int max_width, int max_lines)
 		i += 1;
 	}
 
-	line_width = GFX_truncateText(font, line, buffer, max_width, 0);
+	line_width = GFX_truncateText(font, line, buffer, sizeof(buffer), max_width, 0);
 	strcpy(line, buffer);
 
 	if (line_width > max_line_width)
@@ -1141,90 +1150,65 @@ int GFX_wrapText(TTF_Font *font, char *str, int max_width, int max_lines)
 	return max_line_width;
 }
 
-int GFX_blitWrappedText(TTF_Font *font, const char *text, int max_width, int max_lines, SDL_Color color, SDL_Surface *surface, int y)
+int GFX_blitWrappedText(TTF_Font *face, const char *text, int max_width, int max_lines, SDL_Color color, SDL_Surface *surface, int y)
 {
-	if (!text || !text[0])
-		return y;
-
-	int center_x = surface->w / 2;
-
-	char *text_copy = strdup(text);
-	if (!text_copy)
-		return y;
-
-	char *words[256];
-	int word_count = 0;
-
-	// Split text into words
-	char *token = strtok(text_copy, " ");
-	while (token && word_count < 256) {
-		words[word_count++] = token;
-		token = strtok(NULL, " ");
-	}
-
-	// Build and render lines
-	char line[512] = "";
-	int line_num = 0;
-	for (int w = 0; w < word_count; w++) {
-		char test_line[512];
-		if (line[0] == '\0') {
-			snprintf(test_line, sizeof(test_line), "%s", words[w]);
-		} else {
-			snprintf(test_line, sizeof(test_line), "%s %s", line, words[w]);
-		}
-
-		int test_width, test_height;
-		TTF_SizeUTF8(font, test_line, &test_width, &test_height);
-
-		if (test_width > max_width && line[0] != '\0') {
-			// Current line is full
-			if (!max_lines || line_num < max_lines - 1) {
-				// Render line and continue to next
-				SDL_Surface *line_surface = TTF_RenderUTF8_Blended(font, line, color);
-				if (line_surface) {
-					SDL_BlitSurface(line_surface, NULL, surface, &(SDL_Rect){
-						center_x - line_surface->w / 2, y
-					});
-					y += line_surface->h;
-					SDL_FreeSurface(line_surface);
-				}
-				line_num++;
-				snprintf(line, sizeof(line), "%s", words[w]);
-			} else {
-				// Last allowed line with more words remaining - add ellipsis
-				char truncated[512];
-				snprintf(truncated, sizeof(truncated), "%s...", line);
-				SDL_Surface *line_surface = TTF_RenderUTF8_Blended(font, truncated, color);
-				if (line_surface) {
-					SDL_BlitSurface(line_surface, NULL, surface, &(SDL_Rect){
-						center_x - line_surface->w / 2, y
-					});
-					y += line_surface->h;
-					SDL_FreeSurface(line_surface);
-				}
-				line[0] = '\0';  // Mark as rendered
-				break;
-			}
-		} else {
-			snprintf(line, sizeof(line), "%s", test_line);
-		}
-	}
-
-	// Render any remaining text
-	if (line[0] != '\0') {
-		SDL_Surface *line_surface = TTF_RenderUTF8_Blended(font, line, color);
-		if (line_surface) {
-			SDL_BlitSurface(line_surface, NULL, surface, &(SDL_Rect){
-				center_x - line_surface->w / 2, y
-			});
-			y += line_surface->h;
-			SDL_FreeSurface(line_surface);
-		}
-	}
-
-	free(text_copy);
-	return y;
+    if (!text || max_width <= 0) return y;
+    const char *cursor = text;
+    const int leading = TTF_FontLineSkip(face);
+    int row = 0;
+    while (*cursor && (!max_lines || row < max_lines)) {
+        while (*cursor == 32) cursor++;
+        const char *start = cursor;
+        const char *end = cursor;
+        const char *space = NULL;
+        char line[512] = "";
+        size_t length = 0;
+        while (*end && *end != 10) {
+            const char *next = end + 1;
+            while (*next && ((unsigned char)*next & 0xC0) == 0x80) next++;
+            size_t bytes = (size_t)(next - end);
+            if (length + bytes >= sizeof(line)) break;
+            memcpy(line + length, end, bytes);
+            line[length + bytes] = 0;
+            int width = 0;
+            if (TTF_SizeUTF8(face, line, &width, NULL) < 0 || width > max_width) {
+                line[length] = 0;
+                break;
+            }
+            if (*end == 32) space = end;
+            length += bytes;
+            end = next;
+        }
+        if (*end && *end != 10 && space) {
+            length = (size_t)(space - start);
+            line[length] = 0;
+            cursor = space + 1;
+        } else {
+            cursor = end;
+            if (*cursor == 10) cursor++;
+            else if (end == start && *cursor) {
+                // A single glyph is wider than the column; consume it safely.
+                cursor++;
+                while (*cursor && ((unsigned char)*cursor & 0xC0) == 0x80) cursor++;
+            }
+        }
+        if (max_lines && row == max_lines - 1 && *cursor) {
+            char final[sizeof(line) + 3];
+            snprintf(final, sizeof(final), "%s...", line);
+            GFX_truncateText(face, final, line, sizeof(line), max_width, 0);
+        }
+        SDL_Surface *rendered = line[0] ? TTF_RenderUTF8_Blended(face, line, color) : NULL;
+        if (rendered) {
+            SDL_BlitSurface(rendered, NULL, surface,
+                &(SDL_Rect){(surface->w - rendered->w) / 2, y});
+            SDL_FreeSurface(rendered);
+        }
+        y += leading;
+        row++;
+    }
+    return y;
 }
+
 
 ///////////////////////////////
 
@@ -2152,6 +2136,9 @@ void GFX_blitButton(char *hint, char *button, SDL_Surface *dst, SDL_Rect *dst_re
 {
 	SDL_Surface *text;
 	int ox = 0;
+	// SDL blits write the asset dimensions back into the destination rect.
+	// Preserve the caller's column width before drawing the button asset.
+	const int available_width = dst_rect->w;
 
 	int special_case = !strcmp(button, BRIGHTNESS_BUTTON_LABEL); // TODO: oof
 	int input_asset = HintToButton(button);
@@ -2201,9 +2188,14 @@ void GFX_blitButton(char *hint, char *button, SDL_Surface *dst, SDL_Rect *dst_re
 
 	// hint text
 	SDL_Color text_color = uintToColour(THEME_COLOR6_255);
-	text = TTF_RenderUTF8_Blended(font.small, hint, text_color);
-	SDL_BlitSurface(text, NULL, dst, &(SDL_Rect){ox + dst_rect->x, dst_rect->y + (SCALE1(BUTTON_SIZE) - text->h) / 2, text->w, text->h});
-	SDL_FreeSurface(text);
+	char fitted_hint[256];
+	GFX_truncateText(font.small, hint, fitted_hint, sizeof(fitted_hint),
+		available_width > 0 ? (MAX(0, available_width - ox)) : dst->w, 0);
+	text = TTF_RenderUTF8_Blended(font.small, fitted_hint, text_color);
+	if (text) {
+		SDL_BlitSurface(text, NULL, dst, &(SDL_Rect){ox + dst_rect->x, dst_rect->y + (SCALE1(BUTTON_SIZE) - text->h) / 2, text->w, text->h});
+		SDL_FreeSurface(text);
+	}
 }
 void GFX_blitMessage(TTF_Font *font, char *msg, SDL_Surface *dst, SDL_Rect *dst_rect)
 {
@@ -2581,6 +2573,18 @@ int GFX_blitButtonGroup(char **pairs, int primary, SDL_Surface *dst, int align_r
 	}
 
 	ow += SCALE1(BUTTON_MARGIN);
+	// Each side owns half the footer. Keep the primary action at larger
+	// font sizes instead of painting one group over the other.
+	int budget = (dst->w - SCALE1(PADDING * 2 + BUTTON_MARGIN)) / 2;
+	if (ow > budget && h > 1) {
+		hints[0] = hints[primary == 1 ? 1 : 0];
+		h = 1;
+		ow = hints[0].ow + SCALE1(BUTTON_MARGIN * 2);
+	}
+	if (h == 1 && ow > budget) {
+		hints[0].ow = MAX(0, budget - SCALE1(BUTTON_MARGIN * 2));
+		ow = budget;
+	}
 	if (align_right)
 		ox -= ow;
 	GFX_blitPillColor(ASSET_WHITE_PILL, dst, &(SDL_Rect){ox, oy, ow, SCALE1(PILL_SIZE)}, THEME_COLOR2, RGB_WHITE);
@@ -2589,7 +2593,7 @@ int GFX_blitButtonGroup(char **pairs, int primary, SDL_Surface *dst, int align_r
 	oy += SCALE1(BUTTON_MARGIN);
 	for (int i = 0; i < h; i++)
 	{
-		GFX_blitButton(hints[i].hint, hints[i].button, dst, &(SDL_Rect){ox, oy});
+		GFX_blitButton(hints[i].hint, hints[i].button, dst, &(SDL_Rect){ox, oy, hints[i].ow, SCALE1(BUTTON_SIZE)});
 		ox += hints[i].ow + SCALE1(BUTTON_MARGIN);
 	}
 	return ow;
@@ -4460,10 +4464,11 @@ static void PWR_exitSleep(void)
 static void PWR_waitForWake(void)
 {
 	uint32_t sleep_ticks = SDL_GetTicks();
-	int deep_sleep_attempts = 0;
-	const int sleepDelay = CFG_getSuspendTimeoutSecs() * 1000;
+	uint32_t sleepDelay = CFG_getSuspendTimeoutSecs() * 1000U;
 	while (!PAD_wake())
 	{
+		// A disabled deep-sleep timeout still needs to yield while screen-off.
+		SDL_Delay(50);
 		if (pwr.requested_wake)
 		{
 			pwr.requested_wake = 0;
@@ -4471,13 +4476,15 @@ static void PWR_waitForWake(void)
 		}
 		if (sleepDelay > 0)
 		{
-			SDL_Delay(200);
 			if (SDL_GetTicks() - sleep_ticks >= sleepDelay)
 			{ // increased to two minutes
 				if (SDL_AtomicGet(&pwr.is_charging) ||
 					(CFG_getKeepAwakeWhenUSB() && SDL_AtomicGet(&pwr.is_usb_connected)))
 				{
-					sleep_ticks += 60000; // check again in a minute
+					// Never move the origin into the future: unsigned elapsed
+					// arithmetic would wrap and cause a tight retry loop.
+					sleep_ticks = SDL_GetTicks();
+					sleepDelay = 60000;
 					continue;
 				}
 				if (PLAT_supportsDeepSleep())
@@ -4489,7 +4496,8 @@ static void PWR_waitForWake(void)
 					}
 					else
 					{
-						LOG_warn("failed to enter deep sleep - powering off\n");
+						LOG_warn("failed to enter deep sleep - restoring awake state\n");
+						return;
 					}
 				}
 				if (pwr.can_poweroff)

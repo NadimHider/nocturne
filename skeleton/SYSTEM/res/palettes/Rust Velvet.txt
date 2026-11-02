@@ -1,0 +1,9 @@
+version=1
+name=Rust Velvet
+color1=0xC5A08CFF
+color2=0x211914FF
+color3=0x3B2D25FF
+color4=0xEEE3DCFF
+color5=0x071210FF
+color6=0xBDAFA5FF
+color7=0x0F0A07FF

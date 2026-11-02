@@ -1,7 +1,7 @@
 #!/bin/sh
 # NOTE: stock H700 /bin/sh does not support `set -o pipefail`;
 # using it makes the script exit 2 immediately, which NextUI treats
-# as a failed suspend and escalates to poweroff.
+# as a failed suspend and restores the awake state.
 set -u
 set +e
 exec 0<&-
@@ -12,32 +12,80 @@ exec 0<&-
 wifid_running=
 bluetoothd_running=
 
-sleep_retval=
+sleep_retval=1
 
-asound_state_dir=/tmp/asound-suspend
+# Separate runtime state from persistent settings. The sysfs override also lets
+# host tests exercise failure/recovery paths without touching real hardware.
+power_runtime_dir="${NOCTURNE_POWER_RUNTIME_DIR:-/tmp/nocturne-power}"
+power_sysfs_root="${NOCTURNE_POWER_SYSFS_ROOT:-/sys}"
+asound_state_dir="$power_runtime_dir"
+mkdir -p "$power_runtime_dir" || exit 1
+
+# A quick wake followed by another sleep can arrive while radio startup from
+# the preceding cycle is still running. Check before detecting/stopping radios,
+# otherwise the old worker can turn them back on after the new suspend begins.
+# Do not wait here: the caller cannot process the wake button inside system().
+if [ -r "$power_runtime_dir/resume.pid" ]; then
+	resume_pid=$(cat "$power_runtime_dir/resume.pid")
+	case "$resume_pid" in
+		''|*[!0-9]*) resume_pid= ;;
+	esac
+	if [ -n "$resume_pid" ] && kill -0 "$resume_pid" 2>/dev/null; then
+		echo "Previous radio restore is still busy; cancelling deep sleep" >&2
+		exit 1
+	fi
+fi
+
+# Linux uptime includes time suspended and is unaffected by NTP clock changes.
+elapsed_seconds() {
+	if [ -r /proc/uptime ]; then
+		read uptime unused < /proc/uptime
+		printf '%s\n' "${uptime%%.*}"
+	else
+		date +%s
+	fi
+}
+
+restore_needed=0
+mixer_saved=0
+restore_on_exit() {
+	if [ "$restore_needed" -eq 1 ]; then
+		after_sync
+		after_async &
+		printf '%s\n' "$!" > "$power_runtime_dir/resume.pid"
+	fi
+}
+trap restore_on_exit EXIT
+trap 'exit 1' HUP INT TERM
 
 before() {
 	>&2 echo "Preparing for suspend..."
-	echo 0 > /sys/class/power_supply/axp2202-battery/work_led 2>/dev/null || true
+	restore_needed=1
+	echo 0 > "$power_sysfs_root/class/power_supply/axp2202-battery/work_led" 2>/dev/null || true
 	# RGB models: cut the LED MCU rail, otherwise the last frame stays lit for
 	# the whole sleep. NextUI repaints it on wake (PLAT_enableBacklight).
-	echo 0 > /sys/class/power_supply/axp2202-battery/mcu_pwr 2>/dev/null || true
+	echo 0 > "$power_sysfs_root/class/power_supply/axp2202-battery/mcu_pwr" 2>/dev/null || true
 
 	# Run pre-sleep hooks synchronously before services are stopped.
-	# Subshell ensures a crashing hook cannot block suspend.
-	( "$SYSTEM_PATH/bin/run_hooks.sh" pre-sleep.d --sync-only ) >/dev/null 2>&1 || true
+	# A subshell alone does not protect against a hung hook.
+	"$SYSTEM_PATH/bin/run_hooks.sh" pre-sleep.d --sync-only --timeout 5 || true
 
 	>&2 echo "Saving mixer state..."
 	mkdir -p "$asound_state_dir"
-	alsactl --file "$asound_state_dir/asound.state.pre" store || true
+	# Never restore an old cycle's mixer snapshot after a failed store.
+	if alsactl --file "$asound_state_dir/asound.state.pre" store; then
+		mixer_saved=1
+	else
+		rm -f "$asound_state_dir/asound.state.pre"
+	fi
 
-	if pgrep bluetoothd; then
+	if pgrep bluetoothd >/dev/null; then
 		bluetoothd_running=1
 		>&2 echo "Stopping bluetoothd..."
 		"$SYSTEM_PATH/etc/bluetooth/bt_init.sh" stop || true
 	fi
 
-	if pgrep wpa_supplicant; then
+	if pgrep wpa_supplicant >/dev/null; then
 		wifid_running=1
 		>&2 echo "Stopping wpa_supplicant..."
 		"$SYSTEM_PATH/etc/wifi/wifi_init.sh" stop || true
@@ -50,10 +98,10 @@ before() {
 # for ~10s (buttons appear dead after wake).
 after_sync() {
 	>&2 echo "Resumed from suspend."
-	echo 1 > /sys/class/power_supply/axp2202-battery/work_led 2>/dev/null || true
-	echo 1 > /sys/class/power_supply/axp2202-battery/mcu_pwr 2>/dev/null || true
+	echo 1 > "$power_sysfs_root/class/power_supply/axp2202-battery/work_led" 2>/dev/null || true
+	echo 1 > "$power_sysfs_root/class/power_supply/axp2202-battery/mcu_pwr" 2>/dev/null || true
 
-	if [ -f "$asound_state_dir/asound.state.pre" ]; then
+	if [ "$mixer_saved" -eq 1 ] && [ -f "$asound_state_dir/asound.state.pre" ]; then
 		>&2 echo "Restoring mixer state..."
 		alsactl --file "$asound_state_dir/asound.state.pre" restore || true
 	fi
@@ -78,13 +126,13 @@ after_async() {
 	fi
 
 	# Run post-resume hooks after core services and display state are restored.
-	( "$SYSTEM_PATH/bin/run_hooks.sh" post-resume.d ) >/dev/null 2>&1
+	"$SYSTEM_PATH/bin/run_hooks.sh" post-resume.d --timeout 5 || true
 }
 
 before
 
-hallkey=/sys/class/power_supply/axp2202-battery/hallkey
-os_sleep=/sys/class/power_supply/axp2202-battery/os_sleep
+hallkey="$power_sysfs_root/class/power_supply/axp2202-battery/hallkey"
+os_sleep="$power_sysfs_root/class/power_supply/axp2202-battery/os_sleep"
 
 >&2 echo "Suspending..."
 while :; do
@@ -92,7 +140,7 @@ while :; do
 	for i in $(seq 1 $sleep_max_tries); do
 		>&2 echo "Deep sleep attempt $i of $sleep_max_tries"
 
-		sleep_time=$(date +%s)
+		sleep_time=$(elapsed_seconds)
 
 		# Enable Super Standby before sleeping.
 		# 16 is the value used by stock and stockmod OS, so we preserve
@@ -102,7 +150,7 @@ while :; do
 		[ -w "$os_sleep" ] && printf '16' > "$os_sleep"
 
 		# Now issue suspend-to-ram command.
-		echo mem >/sys/power/state
+		echo mem >"$power_sysfs_root/power/state"
 		sleep_retval=$?
 
 		>&2 echo "Deep sleep: kernel returned $sleep_retval"
@@ -110,7 +158,7 @@ while :; do
 			break
 		fi
 
-		wake_time=$(date +%s)
+		wake_time=$(elapsed_seconds)
 		time_asleep=$(($wake_time-$sleep_time))
 
 		# Workaround for a strange false negative case where
@@ -127,15 +175,17 @@ while :; do
 		fi
 
 
-		>&2 echo "Deep sleep failed: retrying in 3 seconds"
-		sleep 3
+		if [ "$i" -lt "$sleep_max_tries" ]; then
+			>&2 echo "Deep sleep failed: retrying in 3 seconds"
+			sleep 3
+		fi
 	done
 
 	# Clamshells: a pocketed power press wakes the kernel even with the
 	# lid shut. Only hand control back to the caller (which turns the
 	# screen on) once the lid is actually open; otherwise re-suspend.
 	# Non-clamshell hallkey reads 1, and a suspend failure must still
-	# exit so the caller can escalate to poweroff.
+	# exit so the caller can recover the awake state.
 	if [ $sleep_retval -eq 0 ] && [ -r "$hallkey" ] && [ "$(cat "$hallkey")" = "0" ]; then
 		>&2 echo "Woke with lid closed; re-suspending"
 		sleep 1
@@ -144,7 +194,5 @@ while :; do
 	break
 done
 
-after_sync
-after_async &
-
+# The exit trap restores display/audio/services on failure and signals too.
 exit $sleep_retval

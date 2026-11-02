@@ -72,8 +72,8 @@
 #define PADDING 10 // PILL_SIZE / 3 (or non-integer part of the previous calculatiom divided by three)
 #endif
 
-#define FONT_LARGE 14  // game list and primary headings
-#define FONT_MEDIUM 12 // button glyphs and compact headings
+#define FONT_LARGE 10  // primary text shares the Settings body size
+#define FONT_MEDIUM 10 // button glyphs and compact headings
 #define FONT_SMALL 10  // settings rows and button hints
 #define FONT_TINY 8    // secondary labels
 #define FONT_MICRO 8   // battery percentage
