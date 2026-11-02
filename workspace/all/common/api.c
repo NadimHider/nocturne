@@ -1150,90 +1150,65 @@ int GFX_wrapText(TTF_Font *font, char *str, int max_width, int max_lines)
 	return max_line_width;
 }
 
-int GFX_blitWrappedText(TTF_Font *font, const char *text, int max_width, int max_lines, SDL_Color color, SDL_Surface *surface, int y)
+int GFX_blitWrappedText(TTF_Font *face, const char *text, int max_width, int max_lines, SDL_Color color, SDL_Surface *surface, int y)
 {
-	if (!text || !text[0])
-		return y;
-
-	int center_x = surface->w / 2;
-
-	char *text_copy = strdup(text);
-	if (!text_copy)
-		return y;
-
-	char *words[256];
-	int word_count = 0;
-
-	// Split text into words
-	char *token = strtok(text_copy, " ");
-	while (token && word_count < 256) {
-		words[word_count++] = token;
-		token = strtok(NULL, " ");
-	}
-
-	// Build and render lines
-	char line[512] = "";
-	int line_num = 0;
-	for (int w = 0; w < word_count; w++) {
-		char test_line[512];
-		if (line[0] == '\0') {
-			snprintf(test_line, sizeof(test_line), "%s", words[w]);
-		} else {
-			snprintf(test_line, sizeof(test_line), "%s %s", line, words[w]);
-		}
-
-		int test_width, test_height;
-		TTF_SizeUTF8(font, test_line, &test_width, &test_height);
-
-		if (test_width > max_width && line[0] != '\0') {
-			// Current line is full
-			if (!max_lines || line_num < max_lines - 1) {
-				// Render line and continue to next
-				SDL_Surface *line_surface = TTF_RenderUTF8_Blended(font, line, color);
-				if (line_surface) {
-					SDL_BlitSurface(line_surface, NULL, surface, &(SDL_Rect){
-						center_x - line_surface->w / 2, y
-					});
-					y += line_surface->h;
-					SDL_FreeSurface(line_surface);
-				}
-				line_num++;
-				snprintf(line, sizeof(line), "%s", words[w]);
-			} else {
-				// Last allowed line with more words remaining - add ellipsis
-				char truncated[512];
-				snprintf(truncated, sizeof(truncated), "%s...", line);
-				SDL_Surface *line_surface = TTF_RenderUTF8_Blended(font, truncated, color);
-				if (line_surface) {
-					SDL_BlitSurface(line_surface, NULL, surface, &(SDL_Rect){
-						center_x - line_surface->w / 2, y
-					});
-					y += line_surface->h;
-					SDL_FreeSurface(line_surface);
-				}
-				line[0] = '\0';  // Mark as rendered
-				break;
-			}
-		} else {
-			snprintf(line, sizeof(line), "%s", test_line);
-		}
-	}
-
-	// Render any remaining text
-	if (line[0] != '\0') {
-		SDL_Surface *line_surface = TTF_RenderUTF8_Blended(font, line, color);
-		if (line_surface) {
-			SDL_BlitSurface(line_surface, NULL, surface, &(SDL_Rect){
-				center_x - line_surface->w / 2, y
-			});
-			y += line_surface->h;
-			SDL_FreeSurface(line_surface);
-		}
-	}
-
-	free(text_copy);
-	return y;
+    if (!text || max_width <= 0) return y;
+    const char *cursor = text;
+    const int leading = TTF_FontLineSkip(face);
+    int row = 0;
+    while (*cursor && (!max_lines || row < max_lines)) {
+        while (*cursor == 32) cursor++;
+        const char *start = cursor;
+        const char *end = cursor;
+        const char *space = NULL;
+        char line[512] = "";
+        size_t length = 0;
+        while (*end && *end != 10) {
+            const char *next = end + 1;
+            while (*next && ((unsigned char)*next & 0xC0) == 0x80) next++;
+            size_t bytes = (size_t)(next - end);
+            if (length + bytes >= sizeof(line)) break;
+            memcpy(line + length, end, bytes);
+            line[length + bytes] = 0;
+            int width = 0;
+            if (TTF_SizeUTF8(face, line, &width, NULL) < 0 || width > max_width) {
+                line[length] = 0;
+                break;
+            }
+            if (*end == 32) space = end;
+            length += bytes;
+            end = next;
+        }
+        if (*end && *end != 10 && space) {
+            length = (size_t)(space - start);
+            line[length] = 0;
+            cursor = space + 1;
+        } else {
+            cursor = end;
+            if (*cursor == 10) cursor++;
+            else if (end == start && *cursor) {
+                // A single glyph is wider than the column; consume it safely.
+                cursor++;
+                while (*cursor && ((unsigned char)*cursor & 0xC0) == 0x80) cursor++;
+            }
+        }
+        if (max_lines && row == max_lines - 1 && *cursor) {
+            char final[sizeof(line) + 3];
+            snprintf(final, sizeof(final), "%s...", line);
+            GFX_truncateText(face, final, line, sizeof(line), max_width, 0);
+        }
+        SDL_Surface *rendered = line[0] ? TTF_RenderUTF8_Blended(face, line, color) : NULL;
+        if (rendered) {
+            SDL_BlitSurface(rendered, NULL, surface,
+                &(SDL_Rect){(surface->w - rendered->w) / 2, y});
+            SDL_FreeSurface(rendered);
+        }
+        y += leading;
+        row++;
+    }
+    return y;
 }
+
 
 ///////////////////////////////
 

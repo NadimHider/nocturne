@@ -13,6 +13,6 @@ cc -std=gnu11 -ffunction-sections -fdata-sections -DUSE_SDL2 -DPLATFORM=\"deskto
   -Iworkspace/all/common -Iworkspace/desktop/platform -Iworkspace/desktop/libmsettings \
   $(pkg-config --cflags sdl2 SDL2_image SDL2_ttf) \
   tests/nocturne/test_typography.c workspace/all/common/api.c \
-  -Wl,--gc-sections $(pkg-config --libs sdl2 SDL2_image SDL2_ttf) -lm \
+  -Wl,--gc-sections $(pkg-config --libs sdl2 SDL2_image SDL2_ttf) -lsamplerate -lm \
   -o tests/nocturne/build/test_typography
 tests/nocturne/build/test_typography

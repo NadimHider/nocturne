@@ -46,6 +46,14 @@ int main(void)
                     check_fit(inputs[i], capacity, width);
     }
     assert(Typography_points(1, 2) == 10);
+    SDL_Surface *surface = SDL_CreateRGBSurfaceWithFormat(0, 640, 480, 32, SDL_PIXELFORMAT_ARGB8888);
+    assert(surface);
+    SDL_Color white = {255, 255, 255, 255};
+    int leading = TTF_FontLineSkip(font.tiny);
+    assert(GFX_blitWrappedText(font.tiny, "First\nSecond", 600, 2, white, surface, 0) == leading * 2);
+    assert(GFX_blitWrappedText(font.tiny, "A long description that wraps over the screen", 100, 2, white, surface, 0) == leading * 2);
+    assert(GFX_blitWrappedText(font.tiny, "No width", 0, 2, white, surface, 0) == 0);
+    SDL_FreeSurface(surface);
     // A failed live font change must preserve all working font handles.
     TTF_Font *previous = font.small;
     // Fallback resources are intentionally absent in the isolated host test.
