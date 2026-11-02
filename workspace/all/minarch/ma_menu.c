@@ -1070,11 +1070,15 @@ static void Menu_drawOptionRow(MenuItem *item, int type, int selected,
 		if (item->value < count) value = item->values[item->value];
 	}
 
-	SDL_Surface *value_text = value && *value
-		? TTF_RenderUTF8_Blended(font.small, value, uintToColour(THEME_COLOR4_255)) : NULL;
+	char fitted_value[MAX_PATH];
+	GFX_truncateText(font.small, value ? value : "", fitted_value, sizeof(fitted_value), content_width / 2, 0);
+	SDL_Surface *value_text = fitted_value[0]
+		? TTF_RenderUTF8_Blended(font.small, fitted_value, uintToColour(THEME_COLOR4_255)) : NULL;
 	int value_width = value_text ? MIN(value_text->w, content_width / 2) : 0;
 	int label_width = MAX(0, content_width - value_width - (value_width ? padding : 0));
-	SDL_Surface *label = TTF_RenderUTF8_Blended(font.small, item->name,
+	char fitted_label[MAX_PATH];
+	GFX_truncateText(font.small, item->name, fitted_label, sizeof(fitted_label), label_width, 0);
+	SDL_Surface *label = TTF_RenderUTF8_Blended(font.small, fitted_label,
 		uintToColour(selected ? THEME_COLOR5_255 : THEME_COLOR4_255));
 
 	if (selected) {
