@@ -6,8 +6,15 @@
 #include "typography.h"
 
 static int current_size = 1;
+static int fail_font_load = 0;
 int CFG_getFontSize(void) { return current_size; }
 int CFG_getFontStyle(void) { return 0; }
+
+TTF_Font *__real_TTF_OpenFont(const char *path, int points);
+TTF_Font *__wrap_TTF_OpenFont(const char *path, int points)
+{
+    return fail_font_load ? NULL : __real_TTF_OpenFont(path, points);
+}
 
 int GFX_loadSystemFont(const char *path);
 
@@ -56,8 +63,10 @@ int main(void)
     SDL_FreeSurface(surface);
     // A failed live font change must preserve all working font handles.
     TTF_Font *previous = font.small;
-    // Fallback resources are intentionally absent in the isolated host test.
-    assert(GFX_loadSystemFont("/nocturne-test/missing-font.otf") == -1);
+    // Inject failure for both the requested font and its fallback, regardless
+    // of whether the developer has desktop resources installed already.
+    fail_font_load = 1;
+    assert(GFX_loadSystemFont(path) == -1);
     assert(font.small == previous);
     TTF_CloseFont(font.large);
     TTF_CloseFont(font.medium);

@@ -21,7 +21,8 @@ touch "$SDCARD_PATH/Roms/Game Boy (GB)/A very long synthetic game name for scrol
 ui_pid=
 stop_ui() {
   if [ -n "$ui_pid" ]; then
-    kill "$ui_pid" 2>/dev/null || true
+    # This is a disposable fixture process. Avoid its device power-off path.
+    kill -KILL "$ui_pid" 2>/dev/null || true
     wait "$ui_pid" 2>/dev/null || true
     ui_pid=
   fi
