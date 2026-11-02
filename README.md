@@ -9,7 +9,7 @@ A dark, handheld-first NextUI distribution for the Anbernic RG40XX H.
 [![Platform](https://img.shields.io/badge/platform-H700-2f6f5e?style=flat-square)](docs/ARCHITECTURE.md)
 [![H700 build](https://github.com/NadimHider/nocturne/actions/workflows/h700.yaml/badge.svg)](https://github.com/NadimHider/nocturne/actions/workflows/h700.yaml)
 
-[Install](docs/INSTALL.md) | [Controls](docs/CONTROLS.md) | [Configuration](docs/CONFIGURATION.md) | [Architecture](docs/ARCHITECTURE.md) | [Validation](docs/VALIDATION.md)
+[Install](docs/INSTALL.md) | [Controls](docs/CONTROLS.md) | [Configuration](docs/CONFIGURATION.md) | [Palettes](docs/PALETTES.md) | [Architecture](docs/ARCHITECTURE.md) | [Validation](docs/VALIDATION.md)
 
 </div>
 
@@ -32,7 +32,7 @@ This repository is the official source for Nocturne builds, documentation, and r
 | Frontend | NextUI-derived C frontend |
 | Emulation | MinArch with libretro cores |
 | Palettes | 35 built-in dark palettes, including 10 dark-room options |
-| Typography | Departure Mono, four size steps, normal and bold styles |
+| Typography | Departure Mono, shared 10-point default, four size steps, normal and bold styles |
 | Boot | Departure Mono wordmark drawn by the H700 boot shim |
 | Motion | 60 fps selection glide, snappy and comfortable transitions |
 | Storage | Base OS card layout with root-level `.system`, `Tools`, and `Roms` |
@@ -44,7 +44,7 @@ This repository is the official source for Nocturne builds, documentation, and r
 
 - Boots to the game-system list by default. Persisted `defaultView` values are clamped to a valid view.
 - Thirty-five built-in dark palettes, including ten softer Night palettes for dark rooms. See the [palette guide](docs/PALETTES.md).
-- Custom palette files in `.system/res/palettes` are normalized for dark surfaces and readable text contrast.
+- Built-in palettes live in `.system/res/palettes`; personal palettes can be added to `/Palettes` at the card root. Colors are normalized for dark surfaces and readable text contrast.
 - Departure Mono is the default font. Primary text shares the Settings app's comfortable default size across the library, Settings, and emulator menus. Four shared size steps and normal or bold styles remain available.
 - The boot shim draws the Nocturne wordmark in Departure Mono on every boot, before the card is mounted.
 - The font menu lists only the fonts installed in `.system/res`. The stock build ships Departure Mono, Silkscreen, Home Video, and Fake Receipt.
@@ -82,35 +82,29 @@ This repository is the official source for Nocturne builds, documentation, and r
 - Frontend handling for Menu, Start, and Menu + R1.
 - LED control through the LedControl pak.
 - HDMI output, sleep and wake, battery reporting, and power-off handling through the H700 platform layer.
+- Two-stage sleep: screen off first, then deep sleep after the configured delay. Failed suspend restores the awake state; bounded sleep hooks and coordinated radio restoration improve recovery. See [sleep and wake](docs/SLEEP.md).
 - Existing NextUI pak paths and compatibility identifiers are preserved.
 
 ### Maintenance
 
 - CleanRomset consolidates legacy ROM folders and removes non-ROM clutter.
 - `organize_sdcard.py` performs the same cleanup from a Windows PC.
-- Host policy tests cover theme normalization, switcher behavior, and preview caching.
+- Host checks cover theme and palette contrast, shared typography and UTF-8 fitting, switcher behavior, preview caching, and mocked sleep recovery.
 - GitHub Actions builds the H700 component bundle and runs the full core matrix.
 
 ## Screenshots
 
-| Game library | Game Switcher |
+These 640 × 480 previews are captured from the desktop builds of the frontend and Settings app. They show the shared Comfortable font size.
+
+| Game systems | Game library |
 |:---:|:---:|
-| <img src="docs/screenshots/desktop-main.png" width="420" alt="Nocturne game-system list"> | <img src="docs/screenshots/desktop-switcher.png" width="420" alt="Nocturne Game Switcher"> |
-| The game-system list is the default view. | Recent games, position counter, and resume or remove actions. |
+| <img src="docs/screenshots/desktop-main.png" width="420" alt="Nocturne game-system list at the Comfortable font size"> | <img src="docs/screenshots/desktop-library.png" width="420" alt="Nocturne game list at the Comfortable font size"> |
+| The game-system list is the default view. | Game names use the same body size as Settings. |
 
 | Settings | Appearance |
 |:---:|:---:|
 | <img src="docs/screenshots/desktop-settings.png" width="420" alt="Nocturne Settings menu"> | <img src="docs/screenshots/desktop-settings-appearance.png" width="420" alt="Nocturne Appearance settings"> |
 | Settings is available from Menu or the Tools folder. | Font, palette, semantic colors, and interface options. |
-
-The library uses the same Comfortable body size as Settings:
-
-![Game list at the Comfortable font size](docs/screenshots/desktop-library.png)
-
-| Removal confirmation | |
-|:---:|:---:|
-| <img src="docs/screenshots/desktop-switcher-remove.png" width="420" alt="Nocturne Game Switcher removal confirmation"> | |
-| Removing a recent entry requires a second confirmation. | |
 
 ## Requirements
 
@@ -154,17 +148,17 @@ SD card root
 On Linux or macOS with the GitHub CLI:
 
 ```sh
-gh release download v1.0.2 --repo NadimHider/nocturne \
-  --pattern 'Nocturne-v1.0.2-H700-components.zip'
-unzip -o Nocturne-v1.0.2-H700-components.zip -d /path/to/card
+gh release download v1.0.3 --repo NadimHider/nocturne \
+  --pattern 'Nocturne-v1.0.3-H700-components.zip'
+unzip -o Nocturne-v1.0.3-H700-components.zip -d /path/to/card
 sync
 ```
 
 On Windows with PowerShell, replace `H:` with the card's drive letter:
 
 ```powershell
-gh release download v1.0.2 --repo NadimHider/nocturne --pattern 'Nocturne-v1.0.2-H700-components.zip'
-Expand-Archive .\Nocturne-v1.0.2-H700-components.zip -DestinationPath H:\ -Force
+gh release download v1.0.3 --repo NadimHider/nocturne --pattern 'Nocturne-v1.0.3-H700-components.zip'
+Expand-Archive .\Nocturne-v1.0.3-H700-components.zip -DestinationPath H:\ -Force
 ```
 
 The archive contains:
@@ -172,8 +166,10 @@ The archive contains:
 | Path | Contents |
 | --- | --- |
 | `.system/h700/bin/` | `nextui.elf`, `minarch.elf`, `keymon.elf`, `nextval.elf`, and `syncsettings.elf` |
+| `.system/h700/bin/suspend`, `run_hooks.sh` | H700 sleep recovery and hook runner |
 | `.system/h700/dat/` | `dmenu.bin`, the boot shim and Departure Mono boot splash payload |
-| `.system/res/palettes/` | Ten built-in palette files |
+| `.system/res/` | Shared UI assets and Departure Mono, Silkscreen, Home Video, and Fake Receipt fonts |
+| `.system/res/palettes/` | 35 built-in palettes, including 10 Night palettes |
 | `Tools/h700/Settings.pak/` | Settings application |
 | `Tools/h700/LedControl.pak/` | LED control application |
 | `Tools/h700/CleanRomset.pak/` | ROM folder cleanup tool |
@@ -245,6 +241,12 @@ Nocturne stores frontend settings in `.userdata/shared/minuisettings.txt`. The S
 | `wifi` | `0` off, `1` on | `0` |
 | `bluetooth` | `0` off, `1` on | `0` |
 
+The four size presets use primary text at 9, 10, 12, and 14 points. The default
+Comfortable preset matches the Settings app's original 10-point body text across
+the game library, Settings, and emulator menus. Secondary text uses 8, 8, 10, and
+12 points respectively. These are logical sizes before the H700 display's 2×
+scaling; row spacing follows the loaded font's metrics.
+
 ### Game art
 
 The frontend reads one image per game from `<system>/.media/<rom-name>.png`, where `<rom-name>` is the ROM filename without its extension. For example, `Roms/Super Nintendo Entertainment System (SFC)/Soul Blazer (U) [!].sfc` uses `Roms/Super Nintendo Entertainment System (SFC)/.media/Soul Blazer (U) [!].png`.
@@ -253,6 +255,9 @@ Game art is card data and is not included in the release archive. The frontend d
 
 <details>
 <summary>Built-in palettes</summary>
+
+The original ten palettes below remain available. The [palette guide](docs/PALETTES.md)
+lists all 25 additions: 15 everyday dark palettes and 10 softer Night palettes.
 
 | Palette | Character |
 | --- | --- |
@@ -272,7 +277,8 @@ Game art is card data and is not included in the release archive. The frontend d
 <details>
 <summary>Custom palette format</summary>
 
-Palette files live in `.system/res/palettes` and use seven semantic color slots:
+Shipped palette files live in `.system/res/palettes`. Put personal files in
+`/Palettes` at the card root. Both locations use seven semantic color slots:
 
 ```ini
 version=1
@@ -306,13 +312,16 @@ Configuration details, font installation, motion settings, and shortcut migratio
 
 ### Host policy tests
 
-Install a C compiler, GNU Make, Bash, pkg-config, SDL2, and SDL2_image development packages, then run:
+Install a C compiler, GNU Make, Bash, Python 3, pkg-config, and SDL2, SDL2_image,
+SDL2_ttf, and libsamplerate development packages, then run:
 
 ```sh
 make test-nocturne
 ```
 
-The tests cover theme normalization, switcher navigation and removal policy, and preview cache promotion and eviction.
+The tests cover theme and shipped-palette contrast, typography and safe text fitting,
+switcher navigation and removal policy, preview cache promotion and eviction, and
+sleep recovery using mock services and synthetic sysfs files.
 
 ### H700 components
 
@@ -340,6 +349,7 @@ Docker must be usable by the current user. The build uses `ghcr.io/loveretro/h70
 | Workflow | Purpose |
 | --- | --- |
 | [H700 build](https://github.com/NadimHider/nocturne/actions/workflows/h700.yaml) | Cross-builds the H700 components and packages the update archive |
+| [UI and sleep validation](https://github.com/NadimHider/nocturne/actions/workflows/ui-validation.yaml) | Runs host checks, builds desktop apps, and captures all four font-size previews |
 | [CI](https://github.com/NadimHider/nocturne/actions/workflows/ci.yaml) | Builds the full core matrix and the aggregate release package |
 | [Development](https://github.com/NadimHider/nocturne/actions/workflows/dev.yaml) | Desktop and development builds |
 
@@ -365,9 +375,10 @@ The component boundaries, runtime flow, and build pipeline are described in [doc
 
 ## Validation
 
-Nocturne v1.0.2 was built from commit `c2a09365`. The H700 workflow passed in [run 41175554962](https://github.com/NadimHider/nocturne/actions/runs/41175554962), and the full CI matrix passed in [run 41175554920](https://github.com/NadimHider/nocturne/actions/runs/41175554920). The release binaries are aarch64 and retain the same shared-library dependencies as the previous build.
-
-Hardware checks on the RG40XX H cover the Departure Mono boot splash, the default game-system list, pill geometry, typography, selection and transition motion, the four installed fonts, font persistence, the absence of Pak Store, game art lookup, and game launch. The complete checklist, binary hashes, and archive digest are in [docs/VALIDATION.md](docs/VALIDATION.md).
+For v1.0.3 build provenance, workflow runs, binary hashes, and card checks, see
+the [validation record](docs/VALIDATION.md). Host tests and desktop previews
+check layout and recovery logic; repeated sleep/wake cycles, physical boot,
+audio and radio restoration, and battery drain still require RG40XX H testing.
 
 ## Troubleshooting
 
