@@ -37,12 +37,14 @@ for size in 0 1 2 3; do
     sleep 2
     kill -0 "$ui_pid"
     scrot "tests/nocturne/build/previews/$app-$size.png"
+    window=$(xdotool search --onlyvisible --pid "$ui_pid" | head -n 1)
+    xdotool windowfocus --sync "$window"
+    xdotool key --clearmodifiers s
+    sleep 1
     if [ "$app" = settings ]; then
-      window=$(xdotool search --onlyvisible --pid "$ui_pid" | head -n 1)
-      xdotool windowfocus --sync "$window"
-      xdotool key --clearmodifiers s
-      sleep 1
       scrot "tests/nocturne/build/previews/appearance-$size.png"
+    else
+      scrot "tests/nocturne/build/previews/game-list-$size.png"
     fi
     stop_ui
   done

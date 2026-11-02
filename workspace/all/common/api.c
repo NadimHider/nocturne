@@ -2185,9 +2185,14 @@ void GFX_blitButton(char *hint, char *button, SDL_Surface *dst, SDL_Rect *dst_re
 
 	// hint text
 	SDL_Color text_color = uintToColour(THEME_COLOR6_255);
-	text = TTF_RenderUTF8_Blended(font.small, hint, text_color);
-	SDL_BlitSurface(text, NULL, dst, &(SDL_Rect){ox + dst_rect->x, dst_rect->y + (SCALE1(BUTTON_SIZE) - text->h) / 2, text->w, text->h});
-	SDL_FreeSurface(text);
+	char fitted_hint[256];
+	GFX_truncateText(font.small, hint, fitted_hint, sizeof(fitted_hint),
+		dst_rect->w > 0 ? MAX(0, dst_rect->w - ox) : dst->w, 0);
+	text = TTF_RenderUTF8_Blended(font.small, fitted_hint, text_color);
+	if (text) {
+		SDL_BlitSurface(text, NULL, dst, &(SDL_Rect){ox + dst_rect->x, dst_rect->y + (SCALE1(BUTTON_SIZE) - text->h) / 2, text->w, text->h});
+		SDL_FreeSurface(text);
+	}
 }
 void GFX_blitMessage(TTF_Font *font, char *msg, SDL_Surface *dst, SDL_Rect *dst_rect)
 {
@@ -2565,6 +2570,18 @@ int GFX_blitButtonGroup(char **pairs, int primary, SDL_Surface *dst, int align_r
 	}
 
 	ow += SCALE1(BUTTON_MARGIN);
+	// Each side owns half the footer. Keep the primary action at larger
+	// font sizes instead of painting one group over the other.
+	int budget = (dst->w - SCALE1(PADDING * 2 + BUTTON_MARGIN)) / 2;
+	if (ow > budget && h > 1) {
+		hints[0] = hints[primary == 1 ? 1 : 0];
+		h = 1;
+		ow = hints[0].ow + SCALE1(BUTTON_MARGIN * 2);
+	}
+	if (h == 1 && ow > budget) {
+		hints[0].ow = MAX(0, budget - SCALE1(BUTTON_MARGIN * 2));
+		ow = budget;
+	}
 	if (align_right)
 		ox -= ow;
 	GFX_blitPillColor(ASSET_WHITE_PILL, dst, &(SDL_Rect){ox, oy, ow, SCALE1(PILL_SIZE)}, THEME_COLOR2, RGB_WHITE);
@@ -2573,7 +2590,7 @@ int GFX_blitButtonGroup(char **pairs, int primary, SDL_Surface *dst, int align_r
 	oy += SCALE1(BUTTON_MARGIN);
 	for (int i = 0; i < h; i++)
 	{
-		GFX_blitButton(hints[i].hint, hints[i].button, dst, &(SDL_Rect){ox, oy});
+		GFX_blitButton(hints[i].hint, hints[i].button, dst, &(SDL_Rect){ox, oy, hints[i].ow, SCALE1(BUTTON_SIZE)});
 		ox += hints[i].ow + SCALE1(BUTTON_MARGIN);
 	}
 	return ow;
