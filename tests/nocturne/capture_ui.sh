@@ -28,6 +28,21 @@ stop_ui() {
   fi
 }
 trap stop_ui EXIT
+capture_ready_frame() {
+  local destination=$1
+  # Mesa may take longer to paint its first frame on a cold CI runner.
+  # Wait for the actual selection pill instead of accepting a black capture.
+  for attempt in $(seq 1 40); do
+    kill -0 "$ui_pid"
+    scrot -o "$destination"
+    if /usr/bin/python3 -c 'from PIL import Image; import sys; image=Image.open(sys.argv[1]).convert("RGB"); sys.exit(0 if image.crop((10,20,300,80)).getextrema()[1][1] > 80 else 1)' "$destination"; then
+      return
+    fi
+    sleep 0.25
+  done
+  echo "UI did not paint a ready frame: $destination" >&2
+  return 1
+}
 for size in 0 1 2 3; do
   for app in nextui settings; do
     printf 'fontSize=%s\nfontStyle=0\nscreenTimeout=0\nshowMenuAnimations=0\n' "$size" \
@@ -35,9 +50,7 @@ for size in 0 1 2 3; do
     "workspace/all/$app/build/desktop/$app.elf" \
       > "tests/nocturne/build/previews/$app-$size.log" 2>&1 &
     ui_pid=$!
-    sleep 2
-    kill -0 "$ui_pid"
-    scrot "tests/nocturne/build/previews/$app-$size.png"
+    capture_ready_frame "tests/nocturne/build/previews/$app-$size.png"
     window=$(xdotool search --onlyvisible --pid "$ui_pid" | head -n 1)
     xdotool windowfocus --sync "$window"
     xdotool key --clearmodifiers s
