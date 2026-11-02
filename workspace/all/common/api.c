@@ -2136,6 +2136,9 @@ void GFX_blitButton(char *hint, char *button, SDL_Surface *dst, SDL_Rect *dst_re
 {
 	SDL_Surface *text;
 	int ox = 0;
+	// SDL blits write the asset dimensions back into the destination rect.
+	// Preserve the caller's column width before drawing the button asset.
+	const int available_width = dst_rect->w;
 
 	int special_case = !strcmp(button, BRIGHTNESS_BUTTON_LABEL); // TODO: oof
 	int input_asset = HintToButton(button);
@@ -2187,7 +2190,7 @@ void GFX_blitButton(char *hint, char *button, SDL_Surface *dst, SDL_Rect *dst_re
 	SDL_Color text_color = uintToColour(THEME_COLOR6_255);
 	char fitted_hint[256];
 	GFX_truncateText(font.small, hint, fitted_hint, sizeof(fitted_hint),
-		dst_rect->w > 0 ? MAX(0, dst_rect->w - ox) : dst->w, 0);
+		available_width > 0 ? (MAX(0, available_width - ox)) : dst->w, 0);
 	text = TTF_RenderUTF8_Blended(font.small, fitted_hint, text_color);
 	if (text) {
 		SDL_BlitSurface(text, NULL, dst, &(SDL_Rect){ox + dst_rect->x, dst_rect->y + (SCALE1(BUTTON_SIZE) - text->h) / 2, text->w, text->h});
