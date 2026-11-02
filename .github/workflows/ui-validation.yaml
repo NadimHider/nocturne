@@ -1,0 +1,25 @@
+name: UI and sleep validation
+
+on:
+  push:
+    branches: [main, improve/ui-consistency-dark-palettes-sleep]
+  pull_request: {}
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  host-checks:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install host build dependencies
+        run: sudo apt-get update && sudo apt-get install -y libsdl2-dev libsdl2-image-dev libsdl2-ttf-dev libsamplerate0-dev libssl-dev
+      - name: Run policies, palette, typography and mocked sleep tests
+        run: make test-nocturne
+      - name: Compile frontend and Settings translation units
+        run: |
+          FLAGS="-DUSE_SDL2 -DPLATFORM=\"desktop\" -Iworkspace/all/common -Iworkspace/desktop/platform -Iworkspace/desktop/libmsettings"
+          cc -std=gnu11 -fsyntax-only $FLAGS $(pkg-config --cflags sdl2 SDL2_image SDL2_ttf) workspace/all/nextui/nextui.c
+          c++ -std=c++17 -fsyntax-only $FLAGS $(pkg-config --cflags sdl2 SDL2_image SDL2_ttf) workspace/all/settings/menu.cpp workspace/all/settings/settings.cpp workspace/all/settings/palettemenu.cpp workspace/all/settings/btmenu.cpp workspace/all/settings/wifimenu.cpp workspace/all/settings/colorpickermenu.cpp

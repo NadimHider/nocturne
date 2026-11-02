@@ -1,0 +1,9 @@
+version=1
+name=Slate Mist
+color1=0xA9BDC9FF
+color2=0x151A20FF
+color3=0x28313AFF
+color4=0xE0E7EBFF
+color5=0x071210FF
+color6=0xABB8C1FF
+color7=0x080B0FFF

@@ -1,0 +1,9 @@
+version=1
+name=Night Amber
+color1=0xA89170FF
+color2=0x0D0B08FF
+color3=0x1C1812FF
+color4=0xC7BDAEFF
+color5=0x071210FF
+color6=0xAFA494FF
+color7=0x020201FF

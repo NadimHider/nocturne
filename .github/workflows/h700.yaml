@@ -24,22 +24,25 @@ jobs:
 
       - name: Package H700 Update
         run: |
-          mkdir -p h700-staging/bin
-          mkdir -p h700-staging/Tools/Settings.pak
-          mkdir -p h700-staging/Tools/LedControl.pak
-          mkdir -p h700-staging/Tools/CleanRomset.pak
+          mkdir -p h700-staging/.system/h700/bin
+          mkdir -p h700-staging/Tools/h700/Settings.pak
+          mkdir -p h700-staging/Tools/h700/LedControl.pak
+          mkdir -p h700-staging/Tools/h700/CleanRomset.pak
 
-          cp workspace/all/nextui/build/h700/nextui.elf h700-staging/bin/
-          cp workspace/all/settings/build/h700/settings.elf h700-staging/Tools/Settings.pak/
-          cp workspace/all/ledcontrol/build/h700/ledcontrol.elf h700-staging/Tools/LedControl.pak/
-          if [ -d skeleton/EXTRAS/Tools/h700/CleanRomset.pak ]; then cp -r skeleton/EXTRAS/Tools/h700/CleanRomset.pak/* h700-staging/Tools/CleanRomset.pak/; fi
+          cp workspace/all/nextui/build/h700/nextui.elf h700-staging/.system/h700/bin/
+          cp workspace/all/settings/build/h700/settings.elf h700-staging/Tools/h700/Settings.pak/
+          cp workspace/all/ledcontrol/build/h700/ledcontrol.elf h700-staging/Tools/h700/LedControl.pak/
+          if [ -d skeleton/EXTRAS/Tools/h700/CleanRomset.pak ]; then cp -r skeleton/EXTRAS/Tools/h700/CleanRomset.pak/* h700-staging/Tools/h700/CleanRomset.pak/; fi
 
-          if [ -f workspace/all/minarch/build/h700/minarch.elf ]; then cp workspace/all/minarch/build/h700/minarch.elf h700-staging/bin/; fi
-          if [ -f workspace/all/nextval/build/h700/nextval.elf ]; then cp workspace/all/nextval/build/h700/nextval.elf h700-staging/bin/; fi
-          if [ -f workspace/all/syncsettings/build/h700/syncsettings.elf ]; then cp workspace/all/syncsettings/build/h700/syncsettings.elf h700-staging/bin/; fi
-          if [ -f workspace/h700/keymon/keymon.elf ]; then cp workspace/h700/keymon/keymon.elf h700-staging/bin/; fi
+          if [ -f workspace/all/minarch/build/h700/minarch.elf ]; then cp workspace/all/minarch/build/h700/minarch.elf h700-staging/.system/h700/bin/; fi
+          if [ -f workspace/all/nextval/build/h700/nextval.elf ]; then cp workspace/all/nextval/build/h700/nextval.elf h700-staging/.system/h700/bin/; fi
+          if [ -f workspace/all/syncsettings/build/h700/syncsettings.elf ]; then cp workspace/all/syncsettings/build/h700/syncsettings.elf h700-staging/.system/h700/bin/; fi
+          if [ -f workspace/h700/keymon/keymon.elf ]; then cp workspace/h700/keymon/keymon.elf h700-staging/.system/h700/bin/; fi
 
-          cd h700-staging && zip -r ../h700-update.zip bin Tools
+          cp skeleton/SYSTEM/h700/bin/suspend skeleton/SYSTEM/h700/bin/run_hooks.sh h700-staging/.system/h700/bin/
+          cp -R skeleton/SYSTEM/res h700-staging/.system/
+
+          cd h700-staging && zip -r ../h700-update.zip .system Tools
 
       - name: Upload H700 Update Artifact
         uses: actions/upload-artifact@v4

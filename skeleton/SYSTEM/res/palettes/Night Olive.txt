@@ -1,0 +1,9 @@
+version=1
+name=Night Olive
+color1=0x9F9C79FF
+color2=0x0D0D08FF
+color3=0x201F15FF
+color4=0xC5C3AFFF
+color5=0x071210FF
+color6=0xAAA68EFF
+color7=0x020201FF

@@ -410,7 +410,7 @@ int main(int argc, char *argv[])
                 sprintf(display_name, "Time spent having fun: %s", play_time_total_formatted);
 
                 char title[256];
-                int text_width = GFX_truncateText(font.large, display_name, title, max_width, SCALE1(BUTTON_PADDING * 2));
+                int text_width = GFX_truncateText(font.large, display_name, title, sizeof(title), max_width, SCALE1(BUTTON_PADDING * 2));
                 max_width = MIN(max_width, text_width);
 
                 SDL_Surface *text;

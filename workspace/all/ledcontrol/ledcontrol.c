@@ -380,7 +380,7 @@ int main(int argc, char *argv[])
             snprintf(light_name_text, sizeof(light_name_text), "%s", lightnames[selected_light]);
 
             char title[256];
-            int text_width = GFX_truncateText(font.medium, light_name_text, title, max_width, SCALE1(BUTTON_PADDING * 2));
+            int text_width = GFX_truncateText(font.medium, light_name_text, title, sizeof(title), max_width, SCALE1(BUTTON_PADDING * 2));
             max_width = MIN(max_width, text_width);
 
             SDL_Surface *text;

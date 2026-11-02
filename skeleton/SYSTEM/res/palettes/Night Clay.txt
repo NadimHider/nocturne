@@ -1,0 +1,9 @@
+version=1
+name=Night Clay
+color1=0xAA8D7DFF
+color2=0x100B09FF
+color3=0x231A16FF
+color4=0xCBBDB5FF
+color5=0x071210FF
+color6=0xB0A095FF
+color7=0x030201FF

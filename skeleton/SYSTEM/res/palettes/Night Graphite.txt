@@ -1,0 +1,9 @@
+version=1
+name=Night Graphite
+color1=0x979B9EFF
+color2=0x0B0C0DFF
+color3=0x1B1D20FF
+color4=0xBFC2C5FF
+color5=0x071210FF
+color6=0xA5A9AEFF
+color7=0x020202FF

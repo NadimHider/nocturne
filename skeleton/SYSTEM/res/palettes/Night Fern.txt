@@ -1,0 +1,9 @@
+version=1
+name=Night Fern
+color1=0x8C9F80FF
+color2=0x090D09FF
+color3=0x172016FF
+color4=0xBCC5B6FF
+color5=0x071210FF
+color6=0xA0AD98FF
+color7=0x010301FF

@@ -2919,7 +2919,7 @@ int main (int argc, char *argv[]) {
 						GFX_sizeText(font.tiny, position, SCALE1(FONT_TINY), &counter_w, &counter_h);
 						int title_width = MAX(0, max_width - SCALE1(BUTTON_PADDING * 3) - counter_w);
 						char display_name[256];
-						GFX_truncateText(font.large, switcher_name, display_name, title_width + SCALE1(BUTTON_PADDING * 2), SCALE1(BUTTON_PADDING * 2));
+						GFX_truncateText(font.large, switcher_name, display_name, sizeof(display_name), title_width + SCALE1(BUTTON_PADDING * 2), SCALE1(BUTTON_PADDING * 2));
 
 						SDL_Surface* text;
 						SDL_Color textColor = uintToColour(THEME_COLOR6_255);
@@ -3192,9 +3192,9 @@ int main (int argc, char *argv[]) {
 						}
 
 						SDL_LockMutex(fontMutex);
-						SDL_Surface* text = TTF_RenderUTF8_Blended(font.large, entry_name, text_color);
-						SDL_Surface* text_unique = TTF_RenderUTF8_Blended(font.large, display_name, row_is_selected ? uintToColour(THEME_COLOR5_255) : uintToColour(THEME_COLOR6_255));
+						SDL_Surface* text = TTF_RenderUTF8_Blended(font.large, display_name, text_color);
 						SDL_UnlockMutex(fontMutex);
+						if (!text) continue;
 						// Center inside the inset pill, not the full row height.
 						const int pill_text_h = SCALE1(PILL_SIZE - ROW_PILL_INSET * 2);
 						const int text_offset_y = SCALE1(ROW_PILL_INSET) + ((pill_text_h - text->h + 1) >> 1);
@@ -3216,7 +3216,7 @@ int main (int argc, char *argv[]) {
 							}
 							globallpillW =  max_width;
 							SDL_UnlockMutex(animMutex);
-							updatePillTextSurface(entry_name, max_width, uintToColour(THEME_COLOR5_255));
+							updatePillTextSurface(display_name, max_width, uintToColour(THEME_COLOR5_255));
 							AnimTask* task = malloc(sizeof(AnimTask));
 							task->startX = SCALE1(BUTTON_MARGIN);
 							task->startY = SCALE1(previousY+PADDING+ROW_PILL_INSET);
@@ -3227,7 +3227,7 @@ int main (int argc, char *argv[]) {
 							task->move_w = max_width;
 							task->move_h = SCALE1(PILL_SIZE - ROW_PILL_INSET * 2);
 							task->frames = should_animate && CFG_getMenuAnimations() ? 8:1;
-							task->entry_name = strdup(notext ? " " : entry_name);
+							task->entry_name = strdup(notext ? " " : display_name);
 							animPill(task);
 						}
 						SDL_Rect text_rect = { 0, 0, max_width - SCALE1(BUTTON_PADDING*2), text->h };
@@ -3238,10 +3238,8 @@ int main (int argc, char *argv[]) {
 								SDL_Rect row_rect = {SCALE1(BUTTON_MARGIN), SCALE1(PADDING + j * PILL_SIZE + ROW_PILL_INSET), max_width, SCALE1(PILL_SIZE - ROW_PILL_INSET * 2)};
 								GFX_blitPillColor(ASSET_WHITE_PILL, screen, &row_rect, THEME_COLOR3, RGB_WHITE);
 							}
-							SDL_BlitSurface(text_unique, &text_rect, screen, &dest_rect);
 							SDL_BlitSurface(text, &text_rect, screen, &dest_rect);
 						}
-						SDL_FreeSurface(text_unique); // Free after use
 						SDL_FreeSurface(text); // Free after use
 					}
 					if(lastScreen==SCREEN_GAMESWITCHER) {

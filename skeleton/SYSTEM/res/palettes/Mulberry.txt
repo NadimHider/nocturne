@@ -1,0 +1,9 @@
+version=1
+name=Mulberry
+color1=0xC79CC0FF
+color2=0x211622FF
+color3=0x3C283CFF
+color4=0xEDE0EBFF
+color5=0x071210FF
+color6=0xC0AABEFF
+color7=0x0F070FFF

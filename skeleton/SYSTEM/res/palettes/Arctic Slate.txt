@@ -1,0 +1,9 @@
+version=1
+name=Arctic Slate
+color1=0x98C6D0FF
+color2=0x141C22FF
+color3=0x27353EFF
+color4=0xE0EDF0FF
+color5=0x071210FF
+color6=0xA8BEC5FF
+color7=0x070C10FF

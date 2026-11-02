@@ -1,0 +1,9 @@
+version=1
+name=Night Tide
+color1=0x7B9F98FF
+color2=0x080D0CFF
+color3=0x14211EFF
+color4=0xB7C7C2FF
+color5=0x071210FF
+color6=0x98AEA5FF
+color7=0x010302FF

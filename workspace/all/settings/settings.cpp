@@ -1234,7 +1234,7 @@ int main(int argc, char *argv[])
                 if (ctx.appManagesTitle)
                 {
                     char display_name[256];
-                    int text_width = GFX_truncateText(font.large, "Some title", display_name, max_width, SCALE1(BUTTON_PADDING * 2));
+                    int text_width = GFX_truncateText(font.large, "Some title", display_name, sizeof(display_name), max_width, SCALE1(BUTTON_PADDING * 2));
                     max_width = MIN(max_width, text_width);
 
                     SDL_Surface *text;

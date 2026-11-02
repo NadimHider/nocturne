@@ -31,7 +31,7 @@ This repository is the official source for Nocturne builds, documentation, and r
 | Display | 640 x 480, 4:3 |
 | Frontend | NextUI-derived C frontend |
 | Emulation | MinArch with libretro cores |
-| Palettes | 10 built-in dark palettes, custom palette support |
+| Palettes | 35 built-in dark palettes, including 10 dark-room options |
 | Typography | Departure Mono, four size steps, normal and bold styles |
 | Boot | Departure Mono wordmark drawn by the H700 boot shim |
 | Motion | 60 fps selection glide, snappy and comfortable transitions |
@@ -43,9 +43,9 @@ This repository is the official source for Nocturne builds, documentation, and r
 ### Frontend
 
 - Boots to the game-system list by default. Persisted `defaultView` values are clamped to a valid view.
-- Ten built-in dark palettes: Nocturne, Ember, Iris, Tidal, Obsidian Gold, Midnight Sapphire, Aurora Pine, Crimson Noir, Graphite Copper, and Velvet Indigo.
+- Thirty-five built-in dark palettes, including ten softer Night palettes for dark rooms. See the [palette guide](docs/PALETTES.md).
 - Custom palette files in `.system/res/palettes` are normalized for dark surfaces and readable text contrast.
-- Departure Mono is the default font. Settings provides four size steps and a normal or bold style.
+- Departure Mono is the default font. Primary text shares the Settings app's comfortable default size across the library, Settings, and emulator menus. Four shared size steps and normal or bold styles remain available.
 - The boot shim draws the Nocturne wordmark in Departure Mono on every boot, before the card is mounted.
 - The font menu lists only the fonts installed in `.system/res`. The stock build ships Departure Mono, Silkscreen, Home Video, and Fake Receipt.
 - Selection pills are drawn from the native rounded asset at the requested height, with centered text and no cropped end caps.

@@ -19,6 +19,7 @@
 
 #include "utils.h"
 #include "config.h"
+#include "typography.h"
 
 #include <pthread.h>
 
@@ -362,48 +363,43 @@ FALLBACK_IMPLEMENTATION void PLAT_getGPUUsage()
 	perf.gpu_usage = 0.0;
 }
 
+int GFX_getRowHeight(TTF_Font *face, int minimum)
+{
+	return Typography_rowHeight(face ? TTF_FontHeight(face) : 0, SCALE1(minimum), SCALE1(8));
+}
+
+int GFX_centerTextY(TTF_Font *face, int y, int height)
+{
+	return y + (height - TTF_FontHeight(face)) / 2;
+}
+
 int GFX_loadSystemFont(const char *fontPath)
 {
 	// Load/Reload fonts
 	if (!TTF_WasInit())
 		TTF_Init();
 
-	TTF_CloseFont(font.large);
-	TTF_CloseFont(font.medium);
-	TTF_CloseFont(font.small);
-	TTF_CloseFont(font.tiny);
-	TTF_CloseFont(font.micro);
-
-	// Existing numeric settings are preserved; the default is now comfortable
-	// rather than synthetic-bold/compact. Every step is two points smaller than
-	// the original scale, and micro text is never smaller than 8.
-	static const int sizes[4][5] = {
-		{12, 10,  9, 8, 8},
-		{14, 12, 10, 8, 8},
-		{16, 13, 11, 9, 8},
-		{18, 14, 12, 10, 8},
-	};
 	int size = CFG_getFontSize();
-	if (size < 0 || size > 3) size = CFG_DEFAULT_FONT_SIZE;
-	const int *points = sizes[size];
 	const char *paths[] = {fontPath, RES_PATH "/DepartureMono-Regular.otf"};
+	TTF_Font *loaded[5] = {0};
 	TTF_Font **fonts[] = {&font.large, &font.medium, &font.small, &font.tiny, &font.micro};
 	for (int i = 0; i < 5; i++) {
 		for (int attempt = 0; attempt < 2; attempt++) {
-			*fonts[i] = TTF_OpenFont(paths[attempt], SCALE1(points[i]));
-			if (*fonts[i]) break;
+			loaded[i] = TTF_OpenFont(paths[attempt], SCALE1(Typography_points(size, i)));
+			if (loaded[i]) break;
 		}
-		if (!*fonts[i]) {
+		if (!loaded[i]) {
 			LOG_error("Unable to load UI font: %s\n", paths[0]);
+			for (int j = 0; j < i; j++) TTF_CloseFont(loaded[j]);
 			return -1;
 		}
+		TTF_SetFontStyle(loaded[i], CFG_getFontStyle());
 	}
-
-	TTF_SetFontStyle(font.large, CFG_getFontStyle());
-	TTF_SetFontStyle(font.medium, CFG_getFontStyle());
-	TTF_SetFontStyle(font.small, CFG_getFontStyle());
-	TTF_SetFontStyle(font.tiny, CFG_getFontStyle());
-	TTF_SetFontStyle(font.micro, CFG_getFontStyle());
+	// Keep the previous working fonts if any role fails to load.
+	for (int i = 0; i < 5; i++) {
+		if (*fonts[i]) TTF_CloseFont(*fonts[i]);
+		*fonts[i] = loaded[i];
+	}
 
 	return 0;
 }
@@ -1033,22 +1029,35 @@ void GFX_delay(void)
 FALLBACK_IMPLEMENTATION int PLAT_supportsOverscan(void) { return 0; }
 FALLBACK_IMPLEMENTATION void PLAT_setEffectColor(int next_color) {}
 
-int GFX_truncateText(TTF_Font *font, const char *in_name, char *out_name, int max_width, int padding)
+int GFX_truncateText(TTF_Font *font, const char *in_name, char *out_name, size_t capacity, int max_width, int padding)
 {
-	int text_width;
-	strcpy(out_name, in_name);
+	int text_width = 0;
+	if (!capacity) return padding;
+	size_t input_length = strlen(in_name);
+	size_t copied = input_length < capacity ? input_length : capacity - 1;
+	if (copied < input_length)
+		while (copied && ((unsigned char)in_name[copied] & 0xC0) == 0x80) copied--;
+	memmove(out_name, in_name, copied);
+	out_name[copied] = '\0';
 	TTF_SizeUTF8(font, out_name, &text_width, NULL);
-	text_width += padding;
+	if (text_width + padding <= max_width) return text_width + padding;
 
-	while (text_width > max_width)
-	{
-		int len = strlen(out_name);
-		strcpy(&out_name[len - 4], "...\0");
+	// Never cut through a UTF-8 codepoint or write before a short buffer when
+	// even the ellipsis cannot fit (e.g. a narrow label/value column).
+	size_t length = strlen(out_name);
+	if (length < 3) { out_name[0] = '\0'; return padding; }
+	size_t prefix = length - 3;
+	while (prefix && ((unsigned char)out_name[prefix] & 0xC0) == 0x80) prefix--;
+	for (;;) {
+		memcpy(out_name + prefix, "...", 4);
+		text_width = 0;
 		TTF_SizeUTF8(font, out_name, &text_width, NULL);
-		text_width += padding;
+		if (text_width + padding <= max_width) return text_width + padding;
+		if (!prefix) break;
+		do { prefix--; } while (prefix && ((unsigned char)out_name[prefix] & 0xC0) == 0x80);
 	}
-
-	return text_width;
+	out_name[0] = '\0';
+	return padding;
 }
 int GFX_getTextHeight(TTF_Font *font, const char *in_name, char *out_name, int max_width, int padding)
 {
@@ -1082,7 +1091,7 @@ int GFX_wrapText(TTF_Font *font, char *str, int max_width, int max_lines)
 	TTF_SizeUTF8(font, line, &line_width, NULL);
 	if (line_width <= max_width)
 	{
-		line_width = GFX_truncateText(font, line, buffer, max_width, 0);
+		line_width = GFX_truncateText(font, line, buffer, sizeof(buffer), max_width, 0);
 		strcpy(line, buffer);
 		return line_width;
 	}
@@ -1133,7 +1142,7 @@ int GFX_wrapText(TTF_Font *font, char *str, int max_width, int max_lines)
 		i += 1;
 	}
 
-	line_width = GFX_truncateText(font, line, buffer, max_width, 0);
+	line_width = GFX_truncateText(font, line, buffer, sizeof(buffer), max_width, 0);
 	strcpy(line, buffer);
 
 	if (line_width > max_line_width)
@@ -4460,10 +4469,11 @@ static void PWR_exitSleep(void)
 static void PWR_waitForWake(void)
 {
 	uint32_t sleep_ticks = SDL_GetTicks();
-	int deep_sleep_attempts = 0;
-	const int sleepDelay = CFG_getSuspendTimeoutSecs() * 1000;
+	uint32_t sleepDelay = CFG_getSuspendTimeoutSecs() * 1000U;
 	while (!PAD_wake())
 	{
+		// A disabled deep-sleep timeout still needs to yield while screen-off.
+		SDL_Delay(50);
 		if (pwr.requested_wake)
 		{
 			pwr.requested_wake = 0;
@@ -4471,13 +4481,15 @@ static void PWR_waitForWake(void)
 		}
 		if (sleepDelay > 0)
 		{
-			SDL_Delay(200);
 			if (SDL_GetTicks() - sleep_ticks >= sleepDelay)
 			{ // increased to two minutes
 				if (SDL_AtomicGet(&pwr.is_charging) ||
 					(CFG_getKeepAwakeWhenUSB() && SDL_AtomicGet(&pwr.is_usb_connected)))
 				{
-					sleep_ticks += 60000; // check again in a minute
+					// Never move the origin into the future: unsigned elapsed
+					// arithmetic would wrap and cause a tight retry loop.
+					sleep_ticks = SDL_GetTicks();
+					sleepDelay = 60000;
 					continue;
 				}
 				if (PLAT_supportsDeepSleep())
@@ -4489,7 +4501,8 @@ static void PWR_waitForWake(void)
 					}
 					else
 					{
-						LOG_warn("failed to enter deep sleep - powering off\n");
+						LOG_warn("failed to enter deep sleep - restoring awake state\n");
+						return;
 					}
 				}
 				if (pwr.can_poweroff)

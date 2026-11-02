@@ -320,26 +320,26 @@ MenuList::~MenuList()
 void MenuList::performLayout(const SDL_Rect &dst)
 {
     ReadLock r(itemLock);
-    // TODO: consecutive calls to this should only update max_visible rows
-    // and try to persist the current selection state
-    // TODO: If we ever need to add menu entries dynamically, this potentially
-    // needs to be called again after.
-    scope.start = 0;
-    scope.selected = 0;
     scope.count = items.size();
+    scope.selected = std::clamp(scope.selected, 0, std::max(0, scope.count - 1));
+    layout_rect = dst;
+    layout_row_height = GFX_getRowHeight(font.small, BUTTON_SIZE);
+    max_width = 0;
     if (type == MenuItemType::Main)
     {
-        scope.max_visible_options = (dst.h - SCALE1(PILL_SIZE)) / SCALE1(PILL_SIZE);
+        scope.max_visible_options = std::max(1, (dst.h - SCALE1(PILL_SIZE)) / GFX_getRowHeight(font.large, PILL_SIZE));
     }
     else
     {
-        // we are leaving some space to show the description label here, account for roughly two lines or one pill
-        // also account for the scroll icon, in case we need it.
-        // scope.max_visible_options = (dst.h - SCALE1(PILL_SIZE * 2)) / SCALE1(BUTTON_SIZE);
-        scope.max_visible_options = (dst.h - SCALE1(PILL_SIZE)) / SCALE1(BUTTON_SIZE);
+        const int description_height = std::max(SCALE1(PILL_SIZE), 2 * TTF_FontLineSkip(font.tiny) + SCALE1(6));
+        scope.max_visible_options = std::max(1, (dst.h - description_height) / layout_row_height);
     }
-    scope.end = std::min(scope.count, scope.max_visible_options);
-    scope.visible_rows = scope.end;
+    scope.visible_rows = std::min(scope.count, scope.max_visible_options);
+    scope.start = std::clamp(scope.start, 0, std::max(0, scope.count - scope.visible_rows));
+    if (scope.selected < scope.start) scope.start = scope.selected;
+    if (scope.selected >= scope.start + scope.visible_rows)
+        scope.start = std::max(0, scope.selected - scope.visible_rows + 1);
+    scope.end = std::min(scope.count, scope.start + scope.visible_rows);
 
     for (auto itm : items)
         if (itm->getSubMenu())
@@ -350,6 +350,7 @@ void MenuList::performLayout(const SDL_Rect &dst)
 
 bool MenuList::selectNext()
 {
+    if (!scope.count) return false;
     scope.selected++;
     if (scope.selected >= scope.count)
     {
@@ -368,6 +369,7 @@ bool MenuList::selectNext()
 
 bool MenuList::selectPrev()
 {
+    if (!scope.count) return false;
     scope.selected--;
     if (scope.selected < 0)
     {
@@ -389,8 +391,7 @@ std::string MenuList::getSelectedItemName() const
     if(items.empty())
         return "";
 
-    int selected_row = scope.selected - scope.start;
-    return items.at(selected_row)->getName();
+    return items.at(scope.selected)->getName();
 }
 
 bool MenuList::selectByName(const std::string &name)
@@ -405,11 +406,8 @@ bool MenuList::selectByName(const std::string &name)
     //LOG_info("Found element %s (%d) at pos %d\n", name.c_str(), scope.selected - scope.start, toSelect);
     if (toSelect >= 0)
     {
-        performLayout((SDL_Rect){0, 0, FIXED_WIDTH, FIXED_HEIGHT});
-        while(toSelect > 0) {
-            selectNext();
-            toSelect--;
-        }
+        scope.selected = toSelect;
+        performLayout(layout_rect);
         return true;
     }
     return false;
@@ -441,6 +439,10 @@ InputReactionHint MenuList::handleInput(int &dirty, int &quit)
     }
 
     ReadLock r(itemLock);
+    if (items.empty()) {
+        if (PAD_justPressed(BTN_B)) quit = 1;
+        return NoOp;
+    }
     InputReactionHint handled = items.at(scope.selected)->handleInput(dirty);
     if(handled == ResetAllItems) {
         resetAllItems();
@@ -515,7 +517,7 @@ SDL_Rect MenuList::itemSizeHint(const AbstractMenuItem &item)
         {
             for (int j = 0; item.getValues().size() > j && !item.getLabels()[j].empty(); j++)
             {
-                TTF_SizeUTF8(font.tiny, item.getLabels()[j].c_str(), &rw, NULL);
+                TTF_SizeUTF8(font.small, item.getLabels()[j].c_str(), &rw, NULL);
                 if (lw + rw > w)
                     w = lw + rw;
                 if (rw > mrw)
@@ -545,6 +547,11 @@ SDL_Rect MenuList::itemSizeHint(const AbstractMenuItem &item)
 void MenuList::draw(SDL_Surface *surface, const SDL_Rect &dst, const SDL_Rect &dstTitle)
 {
     assert(layout_called);
+    if (layout_row_height != GFX_getRowHeight(font.small, BUTTON_SIZE) ||
+        layout_rect.x != dst.x || layout_rect.y != dst.y || layout_rect.w != dst.w || layout_rect.h != dst.h)
+        performLayout(dst);
+    // Font/style changes can alter widths even when row height is unchanged.
+    max_width = 0;
     ReadLock r(itemLock);
 
     auto cur = !items.empty() ? items.at(scope.selected) : nullptr;
@@ -587,7 +594,7 @@ void MenuList::draw(SDL_Surface *surface, const SDL_Rect &dst, const SDL_Rect &d
             rect = dx(rect, (rect.w - SCALE1(SCROLL_WIDTH)) / 2);
             rect = dy(rect, SCALE1((-SCROLL_HEIGHT) / 2));
             rect.w = SCALE1(SCROLL_WIDTH);
-            rect.h -= SCALE1(PILL_SIZE); // account for description space at the bottom
+            rect.h = scope.visible_rows * layout_row_height;
 
             if (scope.start > 0)
                 // assumes there is some padding above we can yoink
@@ -598,10 +605,10 @@ void MenuList::draw(SDL_Surface *surface, const SDL_Rect &dst, const SDL_Rect &d
 
         if (cur && cur->getDesc().length() > 0)
         {
-            int w, h;
             const auto description = cur->getDesc();
-            GFX_sizeText(font.tiny, description.c_str(), SCALE1(FONT_SMALL), &w, &h);
-            GFX_blitTextCPP(font.tiny, description.c_str(), SCALE1(FONT_SMALL), uintToColour(THEME_COLOR4_255), surface, {(dst.x + dst.w - w) / 2, dst.y + dst.h - h, w, h});
+            const int leading = TTF_FontLineSkip(font.tiny);
+            GFX_blitWrappedText(font.tiny, description.c_str(), dst.w, 2,
+                uintToColour(THEME_COLOR6_255), surface, dst.y + dst.h - 2 * leading);
         }
     }
 
@@ -635,8 +642,8 @@ void MenuList::drawList(SDL_Surface *surface, const SDL_Rect &dst, const SDL_Rec
     int selected_row = scope.selected - scope.start;
     for (int i = scope.start, j = 0; i < scope.end; i++, j++)
     {
-        auto pos = dy(rect, SCALE1(j * BUTTON_SIZE));
-        pos.h = SCALE1(BUTTON_SIZE);
+        auto pos = dy(rect, j * layout_row_height);
+        pos.h = layout_row_height;
         drawListItem(surface, pos, *items[i], j == selected_row);
     }
 }
@@ -646,20 +653,22 @@ void MenuList::drawListItem(SDL_Surface *surface, const SDL_Rect &dst, const Abs
     SDL_Color text_color = uintToColour(THEME_COLOR4_255);
     SDL_Surface *text;
 
-    // int ox = (dst.w - w) / 2; // if we're centering these (but I don't think we should after seeing it)
+    std::vector<char> fitted(item.getName().size() + 1);
+    int width = GFX_truncateText(font.small, item.getName().c_str(), fitted.data(), fitted.size(),
+        std::max(0, dst.w - SCALE1(OPTION_PADDING * 2)), 0);
     if (selected)
     {
         // move out of conditional if centering
-        int w = 0;
-        TTF_SizeUTF8(font.small, item.getName().c_str(), &w, NULL);
-        w += SCALE1(OPTION_PADDING * 2);
+        int w = width + SCALE1(OPTION_PADDING * 2);
 
-        GFX_blitPillDarkCPP(ASSET_BUTTON, surface, {dst.x, dst.y + SCALE1(ROW_PILL_INSET), w, SCALE1(BUTTON_SIZE - ROW_PILL_INSET * 2)});
+        GFX_blitPillDarkCPP(ASSET_BUTTON, surface, {dst.x, dst.y + SCALE1(ROW_PILL_INSET), w, dst.h - SCALE1(ROW_PILL_INSET * 2)});
         text_color = uintToColour(THEME_COLOR5_255);
     }
-    text = TTF_RenderUTF8_Blended(font.small, item.getName().c_str(), text_color);
-    SDL_BlitSurfaceCPP(text, {}, surface, {dst.x + SCALE1(OPTION_PADDING), dst.y  + ((dst.h - text->h) / 2)});
-    SDL_FreeSurface(text);
+    text = TTF_RenderUTF8_Blended(font.small, fitted.data(), text_color);
+    if (text) {
+        SDL_BlitSurfaceCPP(text, {}, surface, {dst.x + SCALE1(OPTION_PADDING), dst.y + ((dst.h - text->h) / 2)});
+        SDL_FreeSurface(text);
+    }
 }
 
 void MenuList::drawFixed(SDL_Surface *surface, const SDL_Rect &dst, const SDL_Rect &dstTitle)
@@ -675,8 +684,8 @@ void MenuList::drawFixed(SDL_Surface *surface, const SDL_Rect &dst, const SDL_Re
     int selected_row = scope.selected - scope.start;
     for (int i = scope.start, j = 0; i < scope.end; i++, j++)
     {
-        auto pos = dy(rect, SCALE1(j * BUTTON_SIZE));
-        pos.h = SCALE1(BUTTON_SIZE);
+        auto pos = dy(rect, j * layout_row_height);
+        pos.h = layout_row_height;
         drawFixedItem(surface, pos, *items[i], j == selected_row);
     }
 }
@@ -702,78 +711,59 @@ namespace
 
 void MenuList::drawFixedItem(SDL_Surface *surface, const SDL_Rect &dst, const AbstractMenuItem &item, bool selected)
 {
-    SDL_Color text_color = uintToColour(THEME_COLOR4_255);
-    SDL_Color text_color_value = uintToColour(THEME_COLOR4_255);
-    SDL_Surface *text;
-
-    // hack - this should be correlated to max_width
-    int mw = dst.w;
-
-    if (!selected)
-    {
-        GFX_blitPillColorCPP(ASSET_BUTTON, surface, {dst.x, dst.y + SCALE1(ROW_PILL_INSET), mw, SCALE1(BUTTON_SIZE - ROW_PILL_INSET * 2)}, THEME_COLOR3, RGB_WHITE);
+    const int padding = SCALE1(OPTION_PADDING);
+    const int inset = SCALE1(ROW_PILL_INSET);
+    const int inner_width = std::max(0, dst.w - padding * 2);
+    const bool custom = item.getType() == ListItemType::Custom;
+    const bool color = item.getType() == ListItemType::Color;
+    const bool has_value = item.getValue().has_value() && item.getType() != ListItemType::Button;
+    const int swatch_size = color ? TTF_FontHeight(font.small) / 2 : 0;
+    const int swatch_space = color ? swatch_size + SCALE1(6) : 0;
+    std::string value = has_value && !custom ? item.getLabel() : "";
+    uint32_t raw_color = 0;
+    if (color && has_value) {
+        raw_color = item.on_get ? std::any_cast<uint32_t>(item.on_get()) : std::any_cast<uint32_t>(item.getValue());
+        char hex[12];
+        snprintf(hex, sizeof(hex), "0x%08X", raw_color);
+        value = hex;
     }
+    std::vector<char> fitted_value(value.size() + 1);
+    GFX_truncateText(font.small, value.c_str(), fitted_value.data(), fitted_value.size(),
+        std::max(0, inner_width / 2 - swatch_space), 0);
+    int value_width = 0;
+    TTF_SizeUTF8(font.small, fitted_value.data(), &value_width, nullptr);
+    const int reserved = custom ? inner_width / 3 :
+        (has_value ? value_width + swatch_space + padding : 0);
+    std::vector<char> fitted_name(item.getName().size() + 1);
+    const int name_width = GFX_truncateText(font.small, item.getName().c_str(), fitted_name.data(), fitted_name.size(),
+        std::max(0, inner_width - reserved), 0);
+
+    GFX_blitPillColorCPP(ASSET_BUTTON, surface,
+        {dst.x, dst.y + inset, dst.w, dst.h - inset * 2},
+        selected ? THEME_COLOR2 : THEME_COLOR3, RGB_WHITE);
+    if (custom) item.drawCustomItem(surface, dst, item, selected);
     if (selected)
-    {
-        // dark header surface behind the value; accent pill marks the label
-        GFX_blitPillLightCPP(ASSET_BUTTON, surface, {dst.x, dst.y + SCALE1(ROW_PILL_INSET), mw, SCALE1(BUTTON_SIZE - ROW_PILL_INSET * 2)});
-    }
-
-    if (item.getValue().has_value())
-    {
-        text = TTF_RenderUTF8_Blended(font.tiny, item.getLabel().c_str(), text_color_value);
-
-        if (item.getType() == ListItemType::Color)
-        {
-            // Read the live color directly from on_get() so the swatch and hex
-            // label always reflect the current value, even after the RGB picker
-            // sets an arbitrary color that is not in the predefined palette.
-            uint32_t rawColor = item.on_get
-                ? std::any_cast<uint32_t>(item.on_get())
-                : std::any_cast<uint32_t>(item.getValue());
-            uint32_t color = mapUint(surface, rawColor);
-            SDL_Rect rect = {
-                dst.x + dst.w - SCALE1(OPTION_PADDING + FONT_TINY),
-                dst.y + SCALE1(BUTTON_SIZE - FONT_TINY) / 2,
-                SCALE1(FONT_TINY), SCALE1(FONT_TINY)};
-            SDL_FillRect(surface, &rect, THEME_COLOR6);
-            rect = dy(dx(rect, 1), 1);
-            rect.h -= 1;
-            rect.w -= 1;
-            SDL_FillRect(surface, &rect, color);
-#define COLOR_PADDING 4
-            // Rerender the label from the live hex value
-            SDL_FreeSurface(text);
-            char hexLabel[12];
-            snprintf(hexLabel, sizeof(hexLabel), "0x%08X", rawColor);
-            text = TTF_RenderUTF8_Blended(font.tiny, hexLabel, text_color_value);
-            SDL_BlitSurfaceCPP(text, {}, surface, {dst.x + mw - text->w - SCALE1(OPTION_PADDING + COLOR_PADDING + FONT_TINY), dst.y + ((dst.h - text->h) / 2)});
-        }
-        else if(item.getType() == ListItemType::Button) {
-            // dont draw anything for now, could be a button hint later
-        }
-        else if(item.getType() == ListItemType::Custom) {
-            item.drawCustomItem(surface, dst, item, selected);
-        }
-        else // Generic and fallback
-            SDL_BlitSurfaceCPP(text, {}, surface, {dst.x + mw - text->w - SCALE1(OPTION_PADDING), dst.y + ((dst.h - text->h) / 2)});
+        GFX_blitPillDarkCPP(ASSET_BUTTON, surface,
+            {dst.x, dst.y + inset, std::min(dst.w, name_width + padding * 2), dst.h - inset * 2});
+    SDL_Surface *text = TTF_RenderUTF8_Blended(font.small, fitted_name.data(),
+        uintToColour(selected ? THEME_COLOR5_255 : THEME_COLOR4_255));
+    if (text) {
+        SDL_BlitSurfaceCPP(text, {}, surface, {dst.x + padding, dst.y + (dst.h - text->h) / 2});
         SDL_FreeSurface(text);
     }
-
-    // TODO: blit a black pill on unselected rows (to cover longer item->values?) or truncate longer item->values?
-    if (selected)
-    {
-        // white pill
-        int w = 0;
-        TTF_SizeUTF8(font.small, item.getName().c_str(), &w, NULL);
-        w += SCALE1(OPTION_PADDING * 2);
-        GFX_blitPillDarkCPP(ASSET_BUTTON, surface, {dst.x, dst.y + SCALE1(ROW_PILL_INSET), w, SCALE1(BUTTON_SIZE - ROW_PILL_INSET * 2)});
-        text_color = uintToColour(THEME_COLOR5_255);
+    text = TTF_RenderUTF8_Blended(font.small, fitted_value.data(), uintToColour(THEME_COLOR4_255));
+    if (text) {
+        SDL_BlitSurfaceCPP(text, {}, surface,
+            {dst.x + dst.w - padding - swatch_space - text->w, dst.y + (dst.h - text->h) / 2});
+        SDL_FreeSurface(text);
     }
-
-    text = TTF_RenderUTF8_Blended(font.small, item.getName().c_str(), text_color);
-    SDL_BlitSurfaceCPP(text, {}, surface, {dst.x + SCALE1(OPTION_PADDING), dst.y + ((dst.h - text->h) / 2)});
-    SDL_FreeSurface(text);
+    if (color && has_value) {
+        SDL_Rect swatch = {dst.x + dst.w - padding - swatch_size, dst.y + (dst.h - swatch_size) / 2,
+            swatch_size, swatch_size};
+        SDL_FillRect(surface, &swatch, THEME_COLOR6);
+        swatch.x++; swatch.y++; swatch.w -= 2; swatch.h -= 2;
+        SDL_FillRect(surface, &swatch, mapUint(surface, raw_color));
+    }
 }
 
 void MenuList::drawInput(SDL_Surface *surface, const SDL_Rect &dst, const SDL_Rect &dstTitle)
@@ -799,8 +789,8 @@ void MenuList::drawInput(SDL_Surface *surface, const SDL_Rect &dst, const SDL_Re
     int selected_row = scope.selected - scope.start;
     for (int i = scope.start, j = 0; i < scope.end; i++, j++)
     {
-        auto pos = dy(rect, SCALE1(j * BUTTON_SIZE));
-        pos.h = SCALE1(BUTTON_SIZE);
+        auto pos = dy(rect, j * layout_row_height);
+        pos.h = layout_row_height;
         pos.w = max_width;
         drawInputItem(surface, pos, *items[i], j == selected_row);
     }
@@ -808,38 +798,7 @@ void MenuList::drawInput(SDL_Surface *surface, const SDL_Rect &dst, const SDL_Re
 
 void MenuList::drawInputItem(SDL_Surface *surface, const SDL_Rect &dst, const AbstractMenuItem &item, bool selected)
 {
-    SDL_Color text_color = uintToColour(THEME_COLOR4_255);
-    SDL_Surface *text;
-
-    // hack
-    int mw = dst.w;
-
-    if (selected)
-    {
-        // gray pill
-        GFX_blitPillLightCPP(ASSET_BUTTON, surface, {dst.x, dst.y + SCALE1(ROW_PILL_INSET), mw, SCALE1(BUTTON_SIZE - ROW_PILL_INSET * 2)});
-
-        // white pill
-        int w = 0;
-        TTF_SizeUTF8(font.small, item.getName().c_str(), &w, NULL);
-        w += SCALE1(OPTION_PADDING * 2);
-        GFX_blitPillDarkCPP(ASSET_BUTTON, surface, {dst.x, dst.y + SCALE1(ROW_PILL_INSET), w, SCALE1(BUTTON_SIZE - ROW_PILL_INSET * 2)});
-        text_color = uintToColour(THEME_COLOR5_255);
-    }
-    text = TTF_RenderUTF8_Blended(font.small, item.getName().c_str(), text_color);
-    SDL_BlitSurfaceCPP(text, {}, surface, {dst.x + SCALE1(OPTION_PADDING), dst.y + ((dst.h - text->h) / 2)});
-    SDL_FreeSurface(text);
-
-    if (/*await_input &&*/ selected)
-    {
-        // buh
-    }
-    else if (item.getValue().has_value())
-    {
-        text = TTF_RenderUTF8_Blended(font.tiny, item.getLabel().c_str(), uintToColour(THEME_COLOR4_255)); // always white
-        SDL_BlitSurfaceCPP(text, {}, surface, {dst.x + mw - text->w - SCALE1(OPTION_PADDING), dst.y + ((dst.h - text->h) / 2)});
-        SDL_FreeSurface(text);
-    }
+    drawFixedItem(surface, dst, item, selected);
 }
 
 void MenuList::drawMain(SDL_Surface *surface, const SDL_Rect &dst, const SDL_Rect &dstTitle)
@@ -852,8 +811,8 @@ void MenuList::drawMain(SDL_Surface *surface, const SDL_Rect &dst, const SDL_Rec
         int selected_row = scope.selected - scope.start;
         for (int i = scope.start, j = 0; i < scope.end; i++, j++)
         {
-            auto pos = dy(dst, SCALE1(j * PILL_SIZE));
-            pos.h = SCALE1(PILL_SIZE);
+            auto pos = dy(dst, j * GFX_getRowHeight(font.large, PILL_SIZE));
+            pos.h = GFX_getRowHeight(font.large, PILL_SIZE);
             // auto hintRect = itemSizeHint(items[i]);
             // pos.w = std::min(pos.w, hintRect.w);
             // pos.h = std::min(pos.h, hintRect.h);
@@ -876,7 +835,7 @@ void MenuList::drawMainItem(SDL_Surface *surface, const SDL_Rect &dst, const Abs
     const bool unique = false;
 
     char truncated[256];
-    int text_width = GFX_truncateText(font.large, item.getName().c_str(), truncated, dst.w, SCALE1(BUTTON_PADDING * 2));
+    int text_width = GFX_truncateText(font.large, item.getName().c_str(), truncated, sizeof(truncated), dst.w, SCALE1(BUTTON_PADDING * 2));
     int max_width = std::min(dst.w, text_width);
 
     if (selected)

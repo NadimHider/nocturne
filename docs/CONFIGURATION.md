@@ -1,5 +1,17 @@
 # Configuration
 
+## Shared typography and themes
+
+Comfortable preserves the Settings app's default 10-point body size (20 physical
+pixels at the H700 UI scale). The library, Settings labels and values, and
+emulator options share the same body size: Compact 9, Comfortable 10, Large 12,
+Extra Large 14. Hints and descriptions use a smaller proportional role. Settings
+and emulator rows grow to fit font metrics, and narrow columns keep labels and
+values separate. Font family and normal/bold choices remain available.
+
+See [Palettes](PALETTES.md) for all 35 dark themes and [Sleep](SLEEP.md) for
+delayed deep sleep and recovery behavior.
+
 Nocturne stores frontend settings in `.userdata/shared/minuisettings.txt`. The Settings app writes this file. Manual edits are supported, but the frontend should be closed while the file is changed.
 
 ## Settings app

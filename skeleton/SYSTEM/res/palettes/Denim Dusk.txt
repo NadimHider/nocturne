@@ -1,0 +1,9 @@
+version=1
+name=Denim Dusk
+color1=0x91AAD7FF
+color2=0x151B28FF
+color3=0x28334AFF
+color4=0xDFE6F3FF
+color5=0x071210FF
+color6=0xAAB7CEFF
+color7=0x080B13FF

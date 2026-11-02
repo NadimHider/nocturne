@@ -1,0 +1,9 @@
+version=1
+name=Night Indigo
+color1=0x8E92AEFF
+color2=0x090A10FF
+color3=0x191C2BFF
+color4=0xBDC0D0FF
+color5=0x071210FF
+color6=0xA1A6BDFF
+color7=0x010103FF
