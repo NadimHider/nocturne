@@ -41,7 +41,9 @@ for radio in wifi bluetooth; do
 #!/bin/sh
 echo "radio:$1" >> "$MOCK_LOG"
 if [ "$1" = start ]; then
-    "$MOCK_REAL_SLEEP" 0.3
+    if [ -n "${MOCK_RADIO_GATE:-}" ]; then
+        while [ ! -f "$MOCK_RADIO_GATE" ]; do "$MOCK_REAL_SLEEP" 0.05; done
+    fi
     echo radio:ready >> "$MOCK_LOG"
 fi
 EOF
@@ -103,13 +105,27 @@ fi
 [ "$(grep -c 'Deep sleep attempt' "$scratch/failure.log")" = 5 ]
 [ "$(grep -c 'retrying in 3 seconds' "$scratch/failure.log")" = 4 ]
 
-# Rapid repeated cycles finish old radio startup before beginning teardown.
+# Rapid repeated cycles abort before a second snapshot/teardown while a radio
+# worker is busy, then succeed on retry after it finishes.
 rmdir "$scratch/sys/power/state"
 : > "$scratch/sys/power/state"
 : > "$MOCK_LOG"
 echo invalid > "$NOCTURNE_POWER_RUNTIME_DIR/resume.pid"
-export MOCK_RADIOS=1 MOCK_REAL_WAIT=1
+export MOCK_RADIOS=1 MOCK_REAL_WAIT=1 MOCK_RADIO_GATE="$scratch/radios-ready"
 sh skeleton/SYSTEM/h700/bin/suspend > "$scratch/radios-first.log" 2>&1
+if sh skeleton/SYSTEM/h700/bin/suspend > "$scratch/radios-busy.log" 2>&1; then
+    echo 'Expected immediate cancellation during radio startup' >&2; exit 1
+fi
+[ "$(grep -c mixer:store "$MOCK_LOG")" = 1 ]
+[ "$(grep -c radio:stop "$MOCK_LOG")" = 2 ]
+grep -q 'Previous radio restore is still busy' "$scratch/radios-busy.log"
+: > "$MOCK_RADIO_GATE"
+resume_pid=$(cat "$NOCTURNE_POWER_RUNTIME_DIR/resume.pid")
+for i in {1..100}; do
+    kill -0 "$resume_pid" 2>/dev/null || break
+    "$real_sleep" 0.1
+done
+[ "$(grep -c radio:ready "$MOCK_LOG")" = 2 ]
 sh skeleton/SYSTEM/h700/bin/suspend > "$scratch/radios-second.log" 2>&1
 awk '/radio:ready/ { ready++ } /mixer:store/ { cycles++; if (cycles == 2 && ready < 2) exit 1 }' "$MOCK_LOG"
 resume_pid=$(cat "$NOCTURNE_POWER_RUNTIME_DIR/resume.pid")
@@ -118,7 +134,27 @@ for i in {1..100}; do
     "$real_sleep" 0.1
 done
 [ "$(grep -c radio:ready "$MOCK_LOG")" = 4 ]
-unset MOCK_RADIOS MOCK_REAL_WAIT
+unset MOCK_RADIOS MOCK_REAL_WAIT MOCK_RADIO_GATE
+
+# Termination before the current mixer snapshot must not restore an old one.
+mkdir -p "$USERDATA_PATH/.hooks/pre-sleep.d"
+cat > "$USERDATA_PATH/.hooks/pre-sleep.d/00-terminate.sh" <<'EOF'
+#!/bin/sh
+kill -TERM "$TEST_SUSPEND_PID"
+EOF
+chmod +x "$USERDATA_PATH/.hooks/pre-sleep.d/00-terminate.sh"
+echo invalid > "$NOCTURNE_POWER_RUNTIME_DIR/resume.pid"
+echo old > "$NOCTURNE_POWER_RUNTIME_DIR/asound.state.pre"
+: > "$MOCK_LOG"
+if sh -c 'TEST_SUSPEND_PID=$$; export TEST_SUSPEND_PID; exec sh "$1"' sh \
+    "$repo/skeleton/SYSTEM/h700/bin/suspend" > "$scratch/terminated.log" 2>&1; then
+    echo 'Expected terminated helper to fail' >&2; exit 1
+fi
+if grep -q mixer:restore "$MOCK_LOG"; then
+    echo 'Termination restored an earlier mixer snapshot' >&2; exit 1
+fi
+[ "$(cat "$led")" = 1 ]
+rm "$USERDATA_PATH/.hooks/pre-sleep.d/00-terminate.sh"
 
 # Per-hook timeouts let the next hook run even when a script hangs.
 mkdir -p "$USERDATA_PATH/.hooks/pre-sleep.d"

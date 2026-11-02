@@ -1,7 +1,7 @@
 #!/bin/sh
 # NOTE: stock H700 /bin/sh does not support `set -o pipefail`;
 # using it makes the script exit 2 immediately, which NextUI treats
-# as a failed suspend and escalates to poweroff.
+# as a failed suspend and restores the awake state.
 set -u
 set +e
 exec 0<&-
@@ -22,22 +22,18 @@ asound_state_dir="$power_runtime_dir"
 mkdir -p "$power_runtime_dir" || exit 1
 
 # A quick wake followed by another sleep can arrive while radio startup from
-# the preceding cycle is still running. Wait before detecting/stopping radios,
+# the preceding cycle is still running. Check before detecting/stopping radios,
 # otherwise the old worker can turn them back on after the new suspend begins.
+# Do not wait here: the caller cannot process the wake button inside system().
 if [ -r "$power_runtime_dir/resume.pid" ]; then
 	resume_pid=$(cat "$power_runtime_dir/resume.pid")
 	case "$resume_pid" in
 		''|*[!0-9]*) resume_pid= ;;
 	esac
-	resume_wait=0
-	while [ -n "$resume_pid" ] && kill -0 "$resume_pid" 2>/dev/null; do
-		if [ "$resume_wait" -ge 60 ]; then
-			echo "Previous radio restore is still busy; cancelling deep sleep" >&2
-			exit 1
-		fi
-		sleep 1
-		resume_wait=$((resume_wait + 1))
-	done
+	if [ -n "$resume_pid" ] && kill -0 "$resume_pid" 2>/dev/null; then
+		echo "Previous radio restore is still busy; cancelling deep sleep" >&2
+		exit 1
+	fi
 fi
 
 # Linux uptime includes time suspended and is unaffected by NTP clock changes.
@@ -51,6 +47,7 @@ elapsed_seconds() {
 }
 
 restore_needed=0
+mixer_saved=0
 restore_on_exit() {
 	if [ "$restore_needed" -eq 1 ]; then
 		after_sync
@@ -76,7 +73,9 @@ before() {
 	>&2 echo "Saving mixer state..."
 	mkdir -p "$asound_state_dir"
 	# Never restore an old cycle's mixer snapshot after a failed store.
-	if ! alsactl --file "$asound_state_dir/asound.state.pre" store; then
+	if alsactl --file "$asound_state_dir/asound.state.pre" store; then
+		mixer_saved=1
+	else
 		rm -f "$asound_state_dir/asound.state.pre"
 	fi
 
@@ -102,7 +101,7 @@ after_sync() {
 	echo 1 > "$power_sysfs_root/class/power_supply/axp2202-battery/work_led" 2>/dev/null || true
 	echo 1 > "$power_sysfs_root/class/power_supply/axp2202-battery/mcu_pwr" 2>/dev/null || true
 
-	if [ -f "$asound_state_dir/asound.state.pre" ]; then
+	if [ "$mixer_saved" -eq 1 ] && [ -f "$asound_state_dir/asound.state.pre" ]; then
 		>&2 echo "Restoring mixer state..."
 		alsactl --file "$asound_state_dir/asound.state.pre" restore || true
 	fi
@@ -186,7 +185,7 @@ while :; do
 	# lid shut. Only hand control back to the caller (which turns the
 	# screen on) once the lid is actually open; otherwise re-suspend.
 	# Non-clamshell hallkey reads 1, and a suspend failure must still
-	# exit so the caller can escalate to poweroff.
+	# exit so the caller can recover the awake state.
 	if [ $sleep_retval -eq 0 ] && [ -r "$hallkey" ] && [ "$(cat "$hallkey")" = "0" ]; then
 		>&2 echo "Woke with lid closed; re-suspending"
 		sleep 1

@@ -15,7 +15,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install host build dependencies
-        run: sudo apt-get update && sudo apt-get install -y libsdl2-dev libsdl2-image-dev libsdl2-ttf-dev libsamplerate0-dev libssl-dev
+        run: sudo apt-get update && sudo apt-get install -y libsdl2-dev libsdl2-image-dev libsdl2-ttf-dev libsamplerate0-dev libssl-dev xvfb xdotool scrot
       - name: Run policies, palette, typography and mocked sleep tests
         run: make test-nocturne
       - name: Compile frontend and Settings translation units
@@ -23,3 +23,20 @@ jobs:
           FLAGS="-DUSE_SDL2 -DPLATFORM=\"desktop\" -Iworkspace/all/common -Iworkspace/desktop/platform -Iworkspace/desktop/libmsettings"
           cc -std=gnu11 -fsyntax-only $FLAGS $(pkg-config --cflags sdl2 SDL2_image SDL2_ttf) workspace/all/nextui/nextui.c
           c++ -std=c++17 -fsyntax-only $FLAGS $(pkg-config --cflags sdl2 SDL2_image SDL2_ttf) workspace/all/settings/menu.cpp workspace/all/settings/settings.cpp workspace/all/settings/palettemenu.cpp workspace/all/settings/btmenu.cpp workspace/all/settings/wifimenu.cpp workspace/all/settings/colorpickermenu.cpp
+      - name: Build desktop frontend and Settings
+        env:
+          PLATFORM: desktop
+          CROSS_COMPILE: /usr/bin/
+          PREFIX: /usr
+          PREFIX_LOCAL: /var/tmp/nextui
+          UNAME_S: Linux
+        run: |
+          make -C workspace/all/nextui
+          make -C workspace/all/settings
+      - name: Capture all four font sizes at 640x480
+        run: xvfb-run -a -s '-screen 0 640x480x24' bash tests/nocturne/capture_ui.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: desktop-ui-previews
+          path: tests/nocturne/build/previews/
