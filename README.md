@@ -103,6 +103,10 @@ This repository is the official source for Nocturne builds, documentation, and r
 | <img src="docs/screenshots/desktop-settings.png" width="420" alt="Nocturne Settings menu"> | <img src="docs/screenshots/desktop-settings-appearance.png" width="420" alt="Nocturne Appearance settings"> |
 | Settings is available from Menu or the Tools folder. | Font, palette, semantic colors, and interface options. |
 
+The library uses the same Comfortable body size as Settings:
+
+![Game list at the Comfortable font size](docs/screenshots/desktop-library.png)
+
 | Removal confirmation | |
 |:---:|:---:|
 | <img src="docs/screenshots/desktop-switcher-remove.png" width="420" alt="Nocturne Game Switcher removal confirmation"> | |

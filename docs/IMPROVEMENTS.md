@@ -6,6 +6,9 @@ Settings and emulator options use measured row heights and separate columns;
 game titles are drawn once, using the same name during static rendering,
 selection animation, and scrolling. Text fitting respects UTF-8 boundaries and
 destination capacity. Explicit description line breaks remain supported.
+Footer groups reserve separate space and retain the primary action when a
+larger font leaves too little room for a secondary hint. Captures are checked
+for missing captions after the SDL button assets have been drawn.
 
 The palette catalog adds 15 everyday dark and 10 extra-dark Night options.
 The existing live Left/Right palette selection and custom-color restoration
