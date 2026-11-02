@@ -15,7 +15,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install host build dependencies
-        run: sudo apt-get update && sudo apt-get install -y libsdl2-dev libsdl2-image-dev libsdl2-ttf-dev libsamplerate0-dev libssl-dev xvfb xdotool scrot
+        run: sudo apt-get update && sudo apt-get install -y libsdl2-dev libsdl2-image-dev libsdl2-ttf-dev libsamplerate0-dev libssl-dev xvfb xdotool scrot python3-pil
       - name: Run policies, palette, typography and mocked sleep tests
         run: make test-nocturne
       - name: Compile frontend and Settings translation units
@@ -35,6 +35,8 @@ jobs:
           make -C workspace/all/settings
       - name: Capture all four font sizes at 640x480
         run: xvfb-run -a -s '-screen 0 640x480x24' bash tests/nocturne/capture_ui.sh
+      - name: Check screenshots for missing footer captions
+        run: /usr/bin/python3 tests/nocturne/test_ui_previews.py
       - uses: actions/upload-artifact@v4
         if: always()
         with:
