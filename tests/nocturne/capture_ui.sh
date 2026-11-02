@@ -35,7 +35,7 @@ capture_ready_frame() {
   for attempt in $(seq 1 40); do
     kill -0 "$ui_pid"
     scrot -o "$destination"
-    if /usr/bin/python3 -c 'from PIL import Image; import sys; image=Image.open(sys.argv[1]).convert("RGB"); sys.exit(0 if image.crop((10,20,300,80)).getextrema()[1][1] > 80 else 1)' "$destination"; then
+    if /usr/bin/python3 -c 'from PIL import Image; import sys; image=Image.open(sys.argv[1]).convert("RGB"); sys.exit(0 if image.crop((10,20,620,360)).getextrema()[1][1] > 80 else 1)' "$destination"; then
       return
     fi
     sleep 0.25
