@@ -24,7 +24,7 @@ Nocturne stores frontend settings in `.userdata/shared/minuisettings.txt`. The S
 | In-Game | Save, load, screenshot, volume, and display adjustment notifications, notification duration, RetroAchievements |
 | Network | Wi-Fi, diagnostics |
 | Bluetooth | Pairing, diagnostics, sample rate limit |
-| About | Build version, platform, stock OS version, BusyBox version |
+| About | Build version and revision on separate rows, platform, stock OS version, BusyBox version |
 
 ## Settings file
 
