@@ -5,7 +5,15 @@ on:
     branches:
       - main
   pull_request: {}
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release tag (vMAJOR.MINOR.PATCH); leave empty for a development build"
+        type: string
+        required: false
+
+permissions:
+  contents: read
 
 jobs:
   build-h700:
@@ -13,6 +21,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Setup
         run: make setup
@@ -23,35 +33,22 @@ jobs:
           PLATFORM: h700
 
       - name: Package H700 Update
-        run: |
-          mkdir -p h700-staging/.system/h700/bin
-          mkdir -p h700-staging/Tools/h700/Settings.pak
-          mkdir -p h700-staging/Tools/h700/LedControl.pak
-          mkdir -p h700-staging/Tools/h700/CleanRomset.pak
-
-          cp workspace/all/nextui/build/h700/nextui.elf h700-staging/.system/h700/bin/
-          cp workspace/all/settings/build/h700/settings.elf h700-staging/Tools/h700/Settings.pak/
-          cp workspace/all/ledcontrol/build/h700/ledcontrol.elf h700-staging/Tools/h700/LedControl.pak/
-          if [ -d skeleton/EXTRAS/Tools/h700/CleanRomset.pak ]; then cp -r skeleton/EXTRAS/Tools/h700/CleanRomset.pak/* h700-staging/Tools/h700/CleanRomset.pak/; fi
-
-          if [ -f workspace/all/minarch/build/h700/minarch.elf ]; then cp workspace/all/minarch/build/h700/minarch.elf h700-staging/.system/h700/bin/; fi
-          if [ -f workspace/all/nextval/build/h700/nextval.elf ]; then cp workspace/all/nextval/build/h700/nextval.elf h700-staging/.system/h700/bin/; fi
-          if [ -f workspace/all/syncsettings/build/h700/syncsettings.elf ]; then cp workspace/all/syncsettings/build/h700/syncsettings.elf h700-staging/.system/h700/bin/; fi
-          if [ -f workspace/h700/keymon/keymon.elf ]; then cp workspace/h700/keymon/keymon.elf h700-staging/.system/h700/bin/; fi
-
-          cp skeleton/SYSTEM/h700/bin/suspend skeleton/SYSTEM/h700/bin/run_hooks.sh h700-staging/.system/h700/bin/
-          cp -R skeleton/SYSTEM/res h700-staging/.system/
-
-          cd h700-staging && zip -r ../h700-update.zip .system Tools
+        env:
+          NOCTURNE_VERSION: ${{ inputs.version }}
+        run: >
+          python3 scripts/package_h700.py --commit "$GITHUB_SHA"
+          --version "$NOCTURNE_VERSION" --output-dir release_assets
 
       - name: Upload H700 Update Artifact
         uses: actions/upload-artifact@v4
         with:
           name: h700-update
-          path: h700-update.zip
+          path: release_assets/
+          if-no-files-found: error
 
       - name: Upload H700 Boot Payload
         uses: actions/upload-artifact@v4
         with:
           name: h700-boot
           path: workspace/h700/boot/output/dmenu.bin
+          if-no-files-found: error

@@ -3,6 +3,7 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."
 mkdir -p tests/nocturne/build
 python3 tests/nocturne/test_palettes.py
+python3 -B -m unittest discover -s tests/nocturne -p test_package_h700.py
 bash tests/nocturne/test_sleep.sh
 cc -std=c11 -Wall -Wextra -Werror -Iworkspace/all/common tests/nocturne/test_theme.c -lm -o tests/nocturne/build/test_theme
 cc -std=c11 -Wall -Wextra -Werror -Iworkspace/all/common tests/nocturne/test_switcher.c -o tests/nocturne/build/test_switcher
