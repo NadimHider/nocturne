@@ -3,7 +3,11 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."
 mkdir -p tests/nocturne/build
 python3 tests/nocturne/test_palettes.py
+python3 -B -m unittest discover -s tests/nocturne -p test_package_h700.py
 bash tests/nocturne/test_sleep.sh
+c++ -std=c++17 -Wall -Wextra -Werror -Iworkspace/all/settings \
+  tests/nocturne/test_buildinfo.cpp -o tests/nocturne/build/test_buildinfo
+tests/nocturne/build/test_buildinfo
 cc -std=c11 -Wall -Wextra -Werror -Iworkspace/all/common tests/nocturne/test_theme.c -lm -o tests/nocturne/build/test_theme
 cc -std=c11 -Wall -Wextra -Werror -Iworkspace/all/common tests/nocturne/test_switcher.c -o tests/nocturne/build/test_switcher
 cc -std=c11 -Wall -Wextra -Werror -DUSE_SDL2 -DPLATFORM=\"desktop\" -Iworkspace/all/common -Iworkspace/desktop/platform $(pkg-config --cflags sdl2 SDL2_image) tests/nocturne/test_preview_cache.c $(pkg-config --libs sdl2 SDL2_image) -o tests/nocturne/build/test_preview_cache

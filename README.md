@@ -135,31 +135,14 @@ SD card root
 ## Installation
 
 > [!IMPORTANT]
-> Back up the card before updating. The release archive overwrites frontend binaries, palette files, and tool paks. It does not touch ROMs, saves, or user settings unless those files are present in the archive.
+> Back up the card before updating. The component archive replaces bundled binaries, UI assets, and tool files. It does not contain ROMs, saves, or user settings.
 
 ### Update an existing card
 
 1. Download the latest release archive from the [releases page](https://github.com/NadimHider/nocturne/releases/latest).
-2. Extract the archive to the root of the SD card, replacing existing files.
-3. Flush the card and eject it safely.
-4. Insert the card into the RG40XX H and power on.
-5. Confirm the frontend opens on the game-system list and that a game launches.
-
-On Linux or macOS with the GitHub CLI:
-
-```sh
-gh release download v1.0.3 --repo NadimHider/nocturne \
-  --pattern 'Nocturne-v1.0.3-H700-components.zip'
-unzip -o Nocturne-v1.0.3-H700-components.zip -d /path/to/card
-sync
-```
-
-On Windows with PowerShell, replace `H:` with the card's drive letter:
-
-```powershell
-gh release download v1.0.3 --repo NadimHider/nocturne --pattern 'Nocturne-v1.0.3-H700-components.zip'
-Expand-Archive .\Nocturne-v1.0.3-H700-components.zip -DestinationPath H:\ -Force
-```
+2. Verify the SHA-256 and confirm the card already has `.system/h700/bin/nextui.elf` at its root. A ROMs-only card is not an update target.
+3. Follow the [install guide](docs/INSTALL.md#update-an-existing-card) to stage the archive, copy the files, and safely eject the card.
+4. Boot the RG40XX H and check that a game launches and resumes.
 
 The archive contains:
 
@@ -320,8 +303,8 @@ make test-nocturne
 ```
 
 The tests cover theme and shipped-palette contrast, typography and safe text fitting,
-switcher navigation and removal policy, preview cache promotion and eviction, and
-sleep recovery using mock services and synthetic sysfs files.
+switcher navigation and removal policy, preview cache promotion and eviction,
+component packaging, and sleep recovery using mock services and synthetic sysfs files.
 
 ### H700 components
 
@@ -343,6 +326,18 @@ make build PLATFORM=h700 COMPILE_CORES=false
 ```
 
 Docker must be usable by the current user. The build uses `ghcr.io/loveretro/h700-toolchain:latest`. Build outputs land in `workspace/*/build/h700`, and the key monitor is built in `workspace/h700/keymon`.
+
+From the repository root after the build, assemble the update ZIP and its SHA-256 file:
+
+```sh
+python3 scripts/package_h700.py --commit "$(git rev-parse HEAD)" --output-dir release_assets
+```
+
+For a numbered release, pass `--version` with the intended tag to the script, or
+set the `version` input when dispatching the H700 workflow on the release commit.
+Without it, the workflow uses a `dev-<commit>` suffix. The packager produces the
+same ZIP for the same inputs and compression environment; the cross-build itself
+is not guaranteed to be byte-reproducible.
 
 ### Continuous integration
 
@@ -375,10 +370,10 @@ The component boundaries, runtime flow, and build pipeline are described in [doc
 
 ## Validation
 
-For v1.0.3 build provenance, workflow runs, binary hashes, and card checks, see
-the [validation record](docs/VALIDATION.md). Host tests and desktop previews
-check layout and recovery logic; repeated sleep/wake cycles, physical boot,
-audio and radio restoration, and battery drain still require RG40XX H testing.
+See the [latest release notes](https://github.com/NadimHider/nocturne/releases/latest)
+for build provenance and the [validation record](docs/VALIDATION.md) for links to
+historical results. Host tests and desktop previews check layout and recovery
+logic; physical boot, repeated sleep/wake, and battery drain require an RG40XX H.
 
 ## Troubleshooting
 

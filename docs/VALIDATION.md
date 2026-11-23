@@ -1,6 +1,14 @@
 # Validation
 
-This page records the build, binary, card, and device checks for Nocturne v1.0.2.
+See the [latest release notes](https://github.com/NadimHider/nocturne/releases/latest) for
+the current artifact's checksum, build, and hardware validation status.
+For v1.0.3, see its [release notes and CI runs](https://github.com/NadimHider/nocturne/releases/tag/v1.0.3).
+Desktop previews and mocked sleep tests do not substitute for a physical boot,
+game launch and save/resume, or repeated sleep/wake on the RG40XX H.
+
+## Historical validation: v1.0.2
+
+The record below applies to v1.0.2 only.
 
 ## Build provenance
 

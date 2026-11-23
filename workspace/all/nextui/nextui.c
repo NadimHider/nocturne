@@ -1689,6 +1689,7 @@ static void Menu_quit(void) {
 
 static int dirty = 1;
 static int previous_row = 0;
+static int previous_start = -1; // list window position of the previous GAMELIST pass
 static int previous_depth = 0;
 
 ///////////////////////////////////////
@@ -2367,6 +2368,8 @@ int main (int argc, char *argv[]) {
 	float previousY;
 	int is_scrolling = 0;
 	bool list_show_entry_names = true;
+	int scroll_delta = 0;              // list window shift since the previous GAMELIST pass
+	SDL_Surface* tmpOldList = NULL;    // captured rows of the pre-scroll list, for the slide-out
 
 	char folderBgPath[1024];
 	folderbgbmp = NULL;
@@ -3162,6 +3165,28 @@ int main (int argc, char *argv[]) {
 					selected_row = top->selected - top->start;
 					previousY = previous_row * PILL_SIZE;
 					targetY = selected_row * PILL_SIZE;
+
+					// A same-depth pass with a moved window means the list scrolled
+					// under the selection. Capture the visible rows so they can slide
+					// out instead of snapping to their new positions.
+					if (previous_depth == stack->count && lastScreen == SCREEN_GAMELIST)
+						scroll_delta = top->start - previous_start;
+					if (scroll_delta != 0 && CFG_getMenuAnimations() && list_show_entry_names) {
+						SDL_Surface* cap = GFX_captureRendererToSurface();
+						if (cap) {
+							int list_w = had_thumb ? MIN(screen->w, ox + SCALE1(BUTTON_MARGIN)) : screen->w;
+							int list_h = (top->end - top->start) * SCALE1(PILL_SIZE);
+							SDL_Rect clip = { 0, SCALE1(PADDING), list_w, list_h };
+							if (clip.w > 0 && clip.h > 0 && clip.x + clip.w <= cap->w && clip.y + clip.h <= cap->h) {
+								tmpOldList = SDL_CreateRGBSurfaceWithFormat(SDL_SWSURFACE, clip.w, clip.h, FIXED_DEPTH, cap->format->format);
+								if (tmpOldList) {
+									SDL_SetSurfaceBlendMode(tmpOldList, SDL_BLENDMODE_BLEND);
+									SDL_BlitSurface(cap, &clip, tmpOldList, NULL);
+								}
+							}
+							SDL_FreeSurface(cap);
+						}
+					}
 					SDL_Color text_color = uintToColour(THEME_COLOR4_255); // list text color
 					for (int i = top->start, j = 0; i < top->end; i++, j++) {
 						Entry* entry = top->entries->items[i];
@@ -3203,6 +3228,13 @@ int main (int argc, char *argv[]) {
 							GFX_resetScrollText();
 							bool should_animate = previous_depth == stack->count;
 							SDL_LockMutex(animMutex);
+							// Continue from wherever the pill currently is instead of
+							// snapping back to the stale previous-row position; this
+							// keeps rapid scrolling smooth when a new move interrupts
+							// an animation that is still in flight.
+							int pill_start_y = (!pillanimdone && pillRect.w > 0)
+								? pillRect.y
+								: SCALE1(previousY+PADDING+ROW_PILL_INSET);
 							if(globalpill) {
 								SDL_FreeSurface(globalpill);
 								globalpill=NULL;
@@ -3219,7 +3251,7 @@ int main (int argc, char *argv[]) {
 							updatePillTextSurface(display_name, max_width, uintToColour(THEME_COLOR5_255));
 							AnimTask* task = malloc(sizeof(AnimTask));
 							task->startX = SCALE1(BUTTON_MARGIN);
-							task->startY = SCALE1(previousY+PADDING+ROW_PILL_INSET);
+							task->startY = pill_start_y;
 							task->targetX = SCALE1(BUTTON_MARGIN);
 							task->targetY = SCALE1(targetY+PADDING+ROW_PILL_INSET);
 							task->targetTextY = SCALE1(PADDING + targetY) + text_offset_y;
@@ -3258,6 +3290,7 @@ int main (int argc, char *argv[]) {
 					}
 
 					previous_row = selected_row;
+					previous_start = top->start;
 					previous_depth = stack->count;
 				}
 				else {
@@ -3366,6 +3399,25 @@ int main (int argc, char *argv[]) {
 					GFX_drawOnLayer(globalText, SCALE1(BUTTON_MARGIN + BUTTON_PADDING), pilltargetTextY, globalText->w, globalText->h, 1.0f, 0, LAYER_SCROLLTEXT);
 				}
 				SDL_UnlockMutex(animMutex);
+			}
+			if (tmpOldList) {
+				// Present the new rows, then slide the captured old rows out.
+				// A single-row scroll slides by one pill height so the list
+				// reads as continuous motion; bigger jumps (page moves, wraps)
+				// only crossfade so nothing appears to teleport.
+				if (!startgame) {
+					GFX_flip(screen);
+					int slide = (scroll_delta == 1 || scroll_delta == -1)
+						? SCALE1(PILL_SIZE * scroll_delta)
+						: 0;
+					GFX_animateSurface(tmpOldList,
+						0, SCALE1(PADDING) + slide,
+						0, SCALE1(PADDING),
+						tmpOldList->w, tmpOldList->h,
+						transition_ms(100), 255, 0, LAYER_ALL);
+				}
+				SDL_FreeSurface(tmpOldList);
+				tmpOldList = NULL;
 			}
 			if(!startgame) // dont flip if game gonna start
 				GFX_flip(screen);

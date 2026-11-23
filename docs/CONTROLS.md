@@ -7,6 +7,7 @@ Nocturne keeps the NextUI control model and adds H700-specific defaults. This pa
 | Input | Action |
 | --- | --- |
 | D-pad | Move the selection |
+| L1 / R1 | Jump to the previous or next letter in game lists |
 | A | Open the selected item |
 | B | Go back |
 | Menu | Open Settings, or Quick Menu if Settings is unavailable |

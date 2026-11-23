@@ -15,12 +15,12 @@ extern "C"
 #include <dirent.h>
 #include <fstream>
 #include <memory>
-#include <sstream>
 #include <regex>
 #include <thread>
 #include <atomic>
 #include <mutex>
 #include <algorithm>
+#include "buildinfo.hpp"
 #include "wifimenu.hpp"
 #include "btmenu.hpp"
 #include "keyboardprompt.hpp"
@@ -1113,15 +1113,16 @@ int main(int argc, char *argv[])
                 "reverting to clean stock firmware.",
                 OverlayDismissMode::DismissOnA);
 
+        const auto build = [] {
+            std::ifstream stamp(ROOT_SYSTEM_PATH "/version.txt");
+            return readBuildInfo(stamp);
+        }();
         auto aboutMenu = new MenuList(MenuItemType::Fixed, "About",
         {
             new StaticMenuItem{ListItemType::Generic, "Build version", "",
-            []() -> std::any {
-                std::ifstream t(ROOT_SYSTEM_PATH "/version.txt");
-                std::stringstream buffer;
-                buffer << t.rdbuf();
-                return buffer.str();
-            }},
+            [version = build.version]() -> std::any { return version; }},
+            new StaticMenuItem{ListItemType::Generic, "Build revision", "",
+            [revision = build.revision]() -> std::any { return revision; }},
             new StaticMenuItem{ListItemType::Generic, "Platform", "",
             []() -> std::any {
                 return std::string(PLAT_getModel()); }

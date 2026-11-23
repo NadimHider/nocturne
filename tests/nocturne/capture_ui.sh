@@ -13,6 +13,7 @@ mkdir -p "$USERDATA_PATH" "$SHARED_USERDATA_PATH" "$SYSTEM_PATH/paks" \
   "$SDCARD_PATH/.system/res" "$SDCARD_PATH/Roms/Game Boy (GB)" \
   "$SDCARD_PATH/Emus/desktop/GB.pak" tests/nocturne/build/previews
 cp -R skeleton/SYSTEM/res/. "$SDCARD_PATH/.system/res/"
+printf 'Nocturne v1.0.4\n0123456\n' > "$SDCARD_PATH/.system/version.txt"
 printf '#!/bin/sh\nexit 1\n' > "$SDCARD_PATH/Emus/desktop/GB.pak/launch.sh"
 chmod +x "$SDCARD_PATH/Emus/desktop/GB.pak/launch.sh"
 touch "$SDCARD_PATH/Roms/Game Boy (GB)/A synthetic sample game.gb"
@@ -57,6 +58,10 @@ for size in 0 1 2 3; do
     sleep 1
     if [ "$app" = settings ]; then
       scrot "tests/nocturne/build/previews/appearance-$size.png"
+      # Back to Settings, wrap from Appearance to the last row (About), open it.
+      xdotool key --clearmodifiers --delay 200 a Up s
+      sleep 1
+      scrot -o "tests/nocturne/build/previews/about-$size.png"
     else
       scrot "tests/nocturne/build/previews/game-list-$size.png"
     fi
